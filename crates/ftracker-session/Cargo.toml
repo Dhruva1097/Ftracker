@@ -1,0 +1,43 @@
+[package]
+name = "ftracker-session"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "ftracker"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+ftracker-core = { path = "../ftracker-core" }
+ftracker-ipc = { path = "../ftracker-ipc" }
+image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tinyfiledialogs.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_LibraryLoader",
+    "Win32_System_ProcessStatus",
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_Shutdown",
+    "Win32_System_Pipes",
+    "Win32_System_Registry",
+    "Win32_System_Ole",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Controls",
+    "Win32_Devices_Geolocation",
+] }

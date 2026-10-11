@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Ftracker upload gate",
+  "version": "1.0.0",
+  "description": "Cancels Chrome/Edge file uploads over 100MB until an admin authenticator code. Does not delete files on disk.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0ftrackerUploadGateKey0001DoNotUseOutsideFtrackerV1LocalForceInstallAndNativeMessagingHostBindingOnly00ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789pluspadding==",
+  "permissions": ["nativeMessaging", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

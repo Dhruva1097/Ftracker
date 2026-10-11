@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLDIR">
+      <Component Id="FtrackerExeComp" Guid="{C1D2E3F4-A5B6-4789-9C0D-1E2F3A4B5C6D}" Win64="$(var.Win64)">
+        <File Id="FtrackerExe" Source="!(bindpath.bin)\ftracker.exe" KeyPath="yes" />
+        <RegistryKey Root="HKLM" Key="Software\Ftracker">
+          <RegistryValue Name="ProductCode" Type="string" Value="$(var.ProductCode)" />
+          <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLDIR]" />
+        </RegistryKey>
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="Ftracker" Type="string" Value="&quot;[INSTALLDIR]ftracker.exe&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Ftracker" Name="UninstallString" Type="string" Value="&quot;[INSTALLDIR]ftracker.exe&quot; --uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Ftracker" Name="DisplayName" Type="string" Value="Ftracker" />
+      </Component>
+      <Component Id="IconComp" Guid="{E3F4A5B6-C7D8-4901-BE2F-3A4B5C6D7E8F}" Win64="$(var.Win64)">
+        <File Id="FtrackerIco" Source="!(bindpath.res)\ftracker.ico" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

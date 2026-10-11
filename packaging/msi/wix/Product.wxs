@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?ifndef Platform ?>
+    <?define Platform = "x64" ?>
+  <?endif ?>
+  <?if $(var.Platform) = x64 ?>
+    <?define ProductCode = "{8F3A0B21-6C74-4E91-9A55-1D2C3B4A5E6F}" ?>
+    <?define Win64 = "yes" ?>
+    <?define ProgramFilesFolder = "ProgramFiles64Folder" ?>
+  <?else ?>
+    <?define ProductCode = "{8F3A0B21-6C74-4E91-9A55-1D2C3B4A5E70}" ?>
+    <?define Win64 = "no" ?>
+    <?define ProgramFilesFolder = "ProgramFilesFolder" ?>
+  <?endif ?>
+  <Product Id="$(var.ProductCode)" Name="Ftracker" Language="1033" Version="1.0.0"
+           Manufacturer="Ftracker" UpgradeCode="{A91C2D3E-4F56-4789-ABCD-0123456789AB}">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="$(var.Platform)" />
+    <Condition Message="Windows 7 SP1 or later is required.">
+      <![CDATA[Installed OR (VersionNT >= 601)]]>
+    </Condition>
+    <Condition Message="Uninstall requires OTP= from ftracker.exe --uninstall (admin authenticator).">
+      <![CDATA[REMOVE <> "ALL" OR FTRACKER_OTP_DONE = "1" OR OTP]]>
+    </Condition>
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Ftracker is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="ProductFeature" Title="Ftracker" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentGroupRef Id="ServiceComponents" />
+      <ComponentGroupRef Id="TaskComponents" />
+      <ComponentGroupRef Id="ExtensionComponents" />
+    </Feature>
+    <UIRef Id="FtrackerUI" />
+    <CustomAction Id="EnrollInteractive" FileKey="FtrackerExe" ExeCommand="--enroll" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="EnrollPreassigned" FileKey="FtrackerExe" ExeCommand="--enroll --preassigned" Execute="deferred" Impersonate="no" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="EnrollInteractive" After="InstallFiles">NOT Installed AND NOT PREASSIGNED AND NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="EnrollPreassigned" After="InstallFiles">NOT Installed AND PREASSIGNED AND NOT UPGRADINGPRODUCTCODE</Custom>
+    </InstallExecuteSequence>
+  </Product>
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="$(var.ProgramFilesFolder)">
+        <Directory Id="INSTALLDIR" Name="Ftracker">
+          <Directory Id="EXTDIR" Name="extension" />
+        </Directory>
+      </Directory>
+      <Directory Id="CommonAppDataFolder">
+        <Directory Id="DATADIR" Name="Ftracker" />
+      </Directory>
+    </Directory>
+  </Fragment>
+</Wix>

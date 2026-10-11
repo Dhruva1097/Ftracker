@@ -1,0 +1,16 @@
+/target/
+**/*.pdb
+**/*.pfx
+.env
+.env.local
+packaging/msi/preassign.json
+packaging/msi/payload.json
+node_modules/
+.pnpm-store/
+dist/
+*.msi
+*.wixobj
+*.wixpdb
+.idea/
+.vscode/
+Thumbs.db

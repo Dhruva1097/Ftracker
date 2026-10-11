@@ -1,0 +1,61 @@
+[package]
+name = "ftracker-core"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+aes-gcm.workspace = true
+base32.workspace = true
+base64.workspace = true
+chrono.workspace = true
+hex.workspace = true
+hmac.workspace = true
+image.workspace = true
+printpdf.workspace = true
+qrcode.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+syn.workspace = true
+proc-macro2.workspace = true
+quote.workspace = true
+libc.workspace = true
+encoding_rs.workspace = true
+mio.workspace = true
+url.workspace = true
+idna.workspace = true
+socket2.workspace = true
+log.workspace = true
+ring.workspace = true
+rustls.workspace = true
+http.workspace = true
+hyper.workspace = true
+indexmap.workspace = true
+hashbrown.workspace = true
+tokio.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+    "Win32_System_RestartManager",
+    "Win32_Security_WinTrust",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+] }

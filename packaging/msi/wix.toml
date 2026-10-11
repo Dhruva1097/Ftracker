@@ -1,0 +1,12 @@
+# cargo-wix / candle: ship x86 and x64. Minimum Windows 7 SP1 (VersionNT >= 601).
+[package]
+product-name = "Ftracker"
+manufacturer = "Ftracker"
+license = false
+
+[bin]
+name = "ftracker"
+
+[msi]
+os-min = "6.1"
+archs = ["x86", "x64"]

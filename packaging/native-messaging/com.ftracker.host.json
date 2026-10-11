@@ -1,0 +1,9 @@
+{
+  "name": "com.ftracker.host",
+  "description": "Ftracker upload gate native host",
+  "path": "C:\\Program Files\\Ftracker\\ftracker.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef/"
+  ]
+}

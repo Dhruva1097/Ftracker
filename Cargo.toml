@@ -1,0 +1,62 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ftracker-core",
+    "crates/ftracker-ipc",
+    "crates/ftracker-session",
+    "crates/ftracker-service",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+anyhow = "=1.0.86"
+base32 = "=0.4.0"
+base64 = "=0.21.7"
+chrono = { version = "=0.4.38", default-features = false, features = ["clock", "std", "serde"] }
+hmac = "=0.12.1"
+image = { version = "=0.24.9", default-features = false, features = ["jpeg"] }
+printpdf = { version = "=0.5.3", features = ["embedded_images"] }
+qrcode = { version = "=0.13.0", default-features = false }
+reqwest = { version = "=0.11.27", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
+rusqlite = { version = "=0.31.0", features = ["bundled", "blob", "backup"] }
+serde = { version = "=1.0.210", features = ["derive"] }
+serde_json = "=1.0.128"
+sha1 = "=0.10.6"
+sha2 = "=0.10.8"
+thiserror = "=1.0.64"
+tinyfiledialogs = "=3.9.1"
+tokio = { version = "=1.36.0", default-features = false, features = ["rt", "time", "macros", "sync"] }
+aes-gcm = "=0.10.3"
+rand = "=0.8.5"
+hex = "=0.4.3"
+zeroize = "=1.8.1"
+windows-service = "=0.6.0"
+# Force MSRV-friendly unifications for Rust 1.77.2 (Windows 7).
+syn = "=2.0.77"
+proc-macro2 = "=1.0.86"
+quote = "=1.0.37"
+libc = "=0.2.161"
+encoding_rs = "=0.8.34"
+mio = "=0.8.11"
+url = "=2.5.2"
+idna = "=0.5.0"
+socket2 = "=0.5.7"
+log = "=0.4.22"
+ring = "=0.17.8"
+rustls = "=0.21.12"
+http = "=0.2.12"
+hyper = "=0.14.30"
+indexmap = "=2.2.6"
+hashbrown = "=0.14.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "s"
+strip = true
+panic = "abort"
