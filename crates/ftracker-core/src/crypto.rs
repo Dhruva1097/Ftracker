@@ -36,7 +36,6 @@ pub fn protect_to_file(path: &Path, plain: &[u8]) -> Result<()> {
     let blob = protect(plain)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
-        crate::paths::apply_admin_acl(parent)?;
     }
     fs::write(path, blob)?;
     crate::paths::apply_admin_acl(path)?;

@@ -55,7 +55,6 @@ impl EncryptedDb {
     pub fn persist(&self) -> Result<()> {
         if let Some(parent) = self.enc_path.parent() {
             fs::create_dir_all(parent)?;
-            crate::paths::apply_admin_acl(parent)?;
         }
         let tmp = self.enc_path.with_extension("snap.db");
         {
@@ -108,8 +107,7 @@ mod tests {
 
     #[test]
     fn persist_restore_roundtrip_not_plaintext() {
-        // Encrypt the way persist() does, without apply_admin_acl (that deny-Users
-        // ACE can lock the current process out of its own temp dir on Windows).
+        // Encrypt the way persist() does, without ACL changes.
         let dir = std::env::temp_dir().join(format!(
             "ftracker-enc-test-{}-{}",
             std::process::id(),
