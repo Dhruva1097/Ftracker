@@ -62,10 +62,10 @@ pub fn run_message_loop(state: &mut SessionState) -> anyhow::Result<()> {
             PCWSTR(class.as_ptr()),
             windows::core::w!("Ftracker"),
             WS_POPUP | WS_VISIBLE,
-            20,
-            20,
-            168,
-            32,
+            crate::ui::dpi::px(20),
+            crate::ui::dpi::px(20),
+            crate::ui::dpi::px(168),
+            crate::ui::dpi::px(32),
             HWND(0),
             windows::Win32::UI::WindowsAndMessaging::HMENU(0),
             windows::Win32::Foundation::HINSTANCE(inst.0),
@@ -77,7 +77,15 @@ pub fn run_message_loop(state: &mut SessionState) -> anyhow::Result<()> {
     }
     unsafe {
         set_user_data(hwnd, state as *mut SessionState as isize);
-        let _ = SetWindowPos(hwnd, HWND_TOPMOST, 20, 20, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            crate::ui::dpi::px(20),
+            crate::ui::dpi::px(20),
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOACTIVATE,
+        );
         let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         let _ = SetTimer(hwnd, 1, 1000, None);
     }
@@ -124,15 +132,27 @@ unsafe extern "system" fn wndproc(
             let hdc = BeginPaint(hwnd, &mut ps);
             let mut rc = RECT::default();
             let _ = GetClientRect(hwnd, &mut rc);
-            let brush = CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x00221A12));
+            let idle = state
+                .as_ref()
+                .map(|s| s.chip_label.contains("idle"))
+                .unwrap_or(false);
+            let fill = if idle {
+                crate::ui::theme::CHIP_IDLE
+            } else {
+                crate::ui::theme::CHIP
+            };
+            let brush = CreateSolidBrush(windows::Win32::Foundation::COLORREF(fill));
             FillRect(hdc, &rc, brush);
             let _ = DeleteObject(windows::Win32::Graphics::Gdi::HGDIOBJ(brush.0));
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, windows::Win32::Foundation::COLORREF(0x00E8EEF4));
+            SetTextColor(
+                hdc,
+                windows::Win32::Foundation::COLORREF(crate::ui::theme::CHIP_TEXT),
+            );
             if let Some(s) = state {
                 s.on_paint();
                 let text: Vec<u16> = s.chip_label.encode_utf16().collect();
-                let _ = TextOutW(hdc, 10, 8, &text);
+                let _ = TextOutW(hdc, crate::ui::dpi::px(10), crate::ui::dpi::px(8), &text);
                 let _ = HBRUSH;
             }
             EndPaint(hwnd, &ps);

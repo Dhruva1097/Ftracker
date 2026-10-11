@@ -1,0 +1,20 @@
+---
+description: Ftracker product, stack, secrets, and UI palette
+alwaysApply: true
+---
+
+# Ftracker
+
+Windows employee time tracker. Rust 1.77.2 (Win7), edition 2021, static CRT, rustls, Tokio current-thread. Workspace: `ftracker-core`, `ftracker-ipc`, `ftracker-session`, `ftracker-service`.
+
+pnpm is a Cargo/WiX task runner only. No npm packages. Do not run `pnpm install`.
+
+`.env` holds only `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID`. Never pack `.env` into the MSI. Never show those values in the UI. Intervals, screenshot, and hours quotas are hardcoded in `AppConfig::default`.
+
+TOTP is generated on-device at enroll (Google Authenticator), stored in DPAPI `secrets.bin`, not in `.env`.
+
+Do not add keylogging, clipboard capture, hidden screenshots, Task Manager hiding, taskkill blocking, kernel USB filters, TLS MITM, Chrome injection, undeletable persistence, or anti-debug packers.
+
+UI colors live in `crates/ftracker-session/src/ui/theme.rs` (blue family). Reuse them; do not invent a second palette. Call `ui::dpi::enable` before windows. Rounded chrome via `ui::chrome` (anti-aliased). Never GDI `RoundRect`.
+
+Keep enroll on one screen. Prefer quiet handling of cancel / not-registered over process exit 1.

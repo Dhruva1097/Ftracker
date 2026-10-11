@@ -72,11 +72,15 @@ pub fn qr_unicode(otpauth: &str) -> String {
 
 /// Square BGRA bitmap (top-down) with a 4-module quiet zone. `dim` is width and height.
 pub fn qr_bgra(otpauth: &str) -> Result<(u32, Vec<u8>)> {
+    qr_bgra_fit(otpauth, 248)
+}
+
+pub fn qr_bgra_fit(otpauth: &str, target_px: u32) -> Result<(u32, Vec<u8>)> {
     let code = QrCode::new(otpauth.as_bytes()).map_err(|e| anyhow!("{e}"))?;
     let modules = code.width() as u32;
     let quiet = 4u32;
     let inner = modules + quiet * 2;
-    let module_px = (248 / inner).max(4);
+    let module_px = (target_px.max(160) / inner).max(4);
     let dim = inner * module_px;
     let mut buf = vec![255u8; (dim as usize) * (dim as usize) * 4];
     for y in 0..modules {

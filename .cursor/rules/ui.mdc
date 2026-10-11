@@ -1,0 +1,14 @@
+---
+description: Ftracker Win32 UI — blue theme, AA rounded chrome, DPI
+globs: crates/ftracker-session/src/ui/**/*.rs
+alwaysApply: false
+---
+
+# Session UI
+
+Colors from `crate::ui::theme`. Lengths through `crate::ui::dpi::px`. Call `dpi::enable` before any window.
+
+- Rounded controls: `crate::ui::chrome::paint` (coverage AA). Never GDI `RoundRect`.
+- Inputs: borderless `EDIT` in `FtrackerField`. Radius ~10px, `LINE` idle / `PRIMARY` focus. No `WS_EX_CLIENTEDGE`.
+- Buttons: owner-draw, same AA radius, filled `PRIMARY` or outlined cancel.
+- Enroll copy: admin scans the QR, then the 6-digit code. Never show bot token or admin chat id from `.env`.
