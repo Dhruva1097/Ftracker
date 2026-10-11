@@ -134,3 +134,73 @@ pub fn hostname() -> String {
 pub fn windows_user() -> String {
     std::env::var("USERNAME").unwrap_or_else(|_| "user".into())
 }
+
+/// Load `.env` from cwd, exe dir, then parents. Does not override variables already set.
+pub fn load_dotenv() {
+    let mut dirs = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        dirs.push(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            dirs.push(parent.to_path_buf());
+        }
+    }
+    let mut visited = std::collections::HashSet::new();
+    for mut dir in dirs {
+        for _ in 0..6 {
+            if !visited.insert(dir.clone()) {
+                break;
+            }
+            let file = dir.join(".env");
+            if file.is_file() {
+                apply_dotenv_file(&file);
+                return;
+            }
+            match dir.parent() {
+                Some(p) => dir = p.to_path_buf(),
+                None => break,
+            }
+        }
+    }
+}
+
+fn apply_dotenv_file(path: &std::path::Path) {
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
+        let k = k.trim();
+        if k != "TELEGRAM_BOT_TOKEN" && k != "TELEGRAM_ADMIN_CHAT_ID" {
+            continue;
+        }
+        if std::env::var(k).ok().filter(|s| !s.is_empty()).is_some() {
+            continue;
+        }
+        let v = v.trim().trim_matches('"').trim_matches('\'').to_string();
+        if !v.is_empty() {
+            std::env::set_var(k, v);
+        }
+    }
+}
+
+pub fn env_telegram_token() -> Option<String> {
+    std::env::var("TELEGRAM_BOT_TOKEN")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+pub fn env_telegram_chat_id() -> Option<String> {
+    std::env::var("TELEGRAM_ADMIN_CHAT_ID")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}

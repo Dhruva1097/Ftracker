@@ -27,8 +27,12 @@ fn interactive_enroll() -> Result<()> {
     totp_dialog::info(
         "This PC records active work time, app titles, and location; samples the work screen while you are active (compressed pictures go only to the admin daily PDF); blocks USB storage; cancels Chrome/Edge uploads over 100MB until an admin authenticator code; starts at sign-in; sends a daily PDF to the admin. Local files are not deleted.",
     );
-    let token = required_input("Telegram bot token:")?;
-    let chat = required_input("Admin Telegram chat id:")?;
+    let token = ftracker_core::config::env_telegram_token()
+        .or_else(|| required_input("Telegram bot token:").ok())
+        .ok_or_else(|| anyhow!("Telegram bot token required"))?;
+    let chat = ftracker_core::config::env_telegram_chat_id()
+        .or_else(|| required_input("Admin Telegram chat id:").ok())
+        .ok_or_else(|| anyhow!("Admin Telegram chat id required"))?;
     let name = required_input("Employee name:")?;
     let hours_s = required_input("Daily hours required (e.g. 8):")?;
     let hours: f64 = hours_s.parse().unwrap_or(8.0);

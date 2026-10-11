@@ -14,6 +14,7 @@ mod ui;
 mod uninstall;
 
 fn main() {
+    ftracker_core::config::load_dotenv();
     let cmd = cli::parse(std::env::args().skip(1).collect());
     let result = match cmd {
         cli::Cmd::Run { restarted } => app::run(restarted),

@@ -10,6 +10,7 @@ use windows_service::define_windows_service;
 define_windows_service!(ffi_service_main, service_main);
 
 fn main() -> anyhow::Result<()> {
+    ftracker_core::config::load_dotenv();
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--console") {
         service::run_worker();
