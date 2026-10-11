@@ -98,3 +98,73 @@ pub fn table_exists(conn: &Connection, name: &str) -> Result<bool> {
         .optional()?;
     Ok(n.is_some())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static N: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn persist_restore_roundtrip_not_plaintext() {
+        // Encrypt the way persist() does, without apply_admin_acl (that deny-Users
+        // ACE can lock the current process out of its own temp dir on Windows).
+        let dir = std::env::temp_dir().join(format!(
+            "ftracker-enc-test-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create test dir");
+        let path = dir.join("ftracker.enc");
+        let key = [7u8; 32];
+        let snap = dir.join("plain.db");
+        {
+            let db = EncryptedDb::open(&key, &path).unwrap();
+            db.conn.execute("CREATE TABLE t(x INTEGER)", []).unwrap();
+            db.conn.execute("INSERT INTO t(x) VALUES(42)", []).unwrap();
+            {
+                let mut dst = Connection::open(&snap).unwrap();
+                rusqlite::backup::Backup::new(&db.conn, &mut dst)
+                    .unwrap()
+                    .run_to_completion(100, std::time::Duration::from_millis(1), None)
+                    .unwrap();
+            }
+            let plain = fs::read(&snap).unwrap();
+            assert!(plain.starts_with(b"SQLite format 3"));
+            let mut nonce = [0u8; 12];
+            rand::thread_rng().fill_bytes(&mut nonce);
+            let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
+            let ct = cipher
+                .encrypt(Nonce::from_slice(&nonce), plain.as_ref())
+                .unwrap();
+            let mut out = Vec::new();
+            out.extend_from_slice(&nonce);
+            out.extend_from_slice(&ct);
+            fs::write(&path, &out).unwrap();
+            let _ = fs::remove_file(&snap);
+        }
+        let blob = fs::read(&path).unwrap();
+        let as_text = String::from_utf8_lossy(&blob);
+        assert!(
+            !as_text.contains("SQLite format 3"),
+            "ciphertext must not be a raw sqlite file"
+        );
+        let db2 = EncryptedDb::open(&key, &path).unwrap();
+        let v: i64 = db2
+            .conn
+            .query_row("SELECT x FROM t", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 42);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bad_key_rejected() {
+        let dir = std::env::temp_dir().join("ftracker-enc-badkey");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("x.enc");
+        assert!(EncryptedDb::open(&[1u8; 16], &path).is_err());
+    }
+}

@@ -25,3 +25,21 @@ pub fn hamming(a: u64, b: u64) -> u32 {
 pub fn similar(a: u64, b: u64, threshold: u32) -> bool {
     a != 0 && b != 0 && hamming(a, b) <= threshold
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identical_frames_are_similar() {
+        let mut px = vec![0u8; 9 * 8];
+        for i in 0..px.len() {
+            px[i] = (i % 17) as u8;
+        }
+        let h = dhash_gray(9, 8, &px);
+        assert_ne!(h, 0);
+        assert!(similar(h, h, 10));
+        assert!(!similar(h, 0, 10));
+        assert_eq!(hamming(h, h), 0);
+    }
+}

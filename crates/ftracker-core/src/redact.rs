@@ -12,3 +12,15 @@ pub fn redact_title(title: &str) -> String {
         title.chars().take(180).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redacts_password_and_otp_titles() {
+        assert_eq!(redact_title("Enter password"), "[redacted]");
+        assert_eq!(redact_title("Google Authenticator"), "[redacted]");
+        assert_eq!(redact_title("GitHub - Ftracker"), "GitHub - Ftracker");
+    }
+}

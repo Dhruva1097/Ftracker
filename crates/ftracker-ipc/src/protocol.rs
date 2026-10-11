@@ -37,3 +37,30 @@ pub enum IpcMsg {
         got: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipe::{read_msg, write_msg};
+    use std::io::Cursor;
+
+    #[test]
+    fn ipc_frame_roundtrip() {
+        let msg = IpcMsg::UsbBlocked {
+            letter: "E:".into(),
+            name: "Kingston".into(),
+            serial: "ABC".into(),
+            vidpid: "0951:1666".into(),
+        };
+        let mut buf = Vec::new();
+        write_msg(&mut buf, &msg).unwrap();
+        let decoded = read_msg(&mut Cursor::new(buf)).unwrap();
+        match decoded {
+            IpcMsg::UsbBlocked { letter, serial, .. } => {
+                assert_eq!(letter, "E:");
+                assert_eq!(serial, "ABC");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+}

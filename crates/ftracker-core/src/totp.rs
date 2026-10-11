@@ -79,3 +79,32 @@ pub fn recovery_codes() -> Vec<String> {
     }
     codes
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn totp_roundtrip_and_skew() {
+        let secret = generate_secret_b32();
+        let ts = 1_700_000_000i64;
+        let code = generate_code(&secret, ts).unwrap();
+        assert_eq!(code.len(), 6);
+        assert!(verify(&secret, &code, ts));
+        assert!(verify(&secret, &code, ts + 29));
+        assert!(!verify(&secret, "12", ts));
+        assert!(!verify(&secret, "abcdef", ts));
+        let other = generate_secret_b32();
+        assert_ne!(secret, other);
+        assert!(!verify(&other, &code, ts));
+    }
+
+    #[test]
+    fn otpauth_contains_secret_not_token() {
+        let url = otpauth_url("Alice", "PC1", "MFRGGZDFMZTWQ2LK");
+        assert!(url.starts_with("otpauth://totp/"));
+        assert!(url.contains("secret=MFRGGZDFMZTWQ2LK"));
+        assert!(!url.contains("bot"));
+        assert!(!qr_unicode(&url).is_empty());
+    }
+}

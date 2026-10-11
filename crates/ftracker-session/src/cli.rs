@@ -45,3 +45,28 @@ pub fn parse(args: Vec<String>) -> Cmd {
         Cmd::Run { restarted: false }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn p(args: &[&str]) -> Cmd {
+        parse(args.iter().map(|s| s.to_string()).collect())
+    }
+
+    #[test]
+    fn parses_flags() {
+        assert!(matches!(p(&["--enroll"]), Cmd::Enroll { preassigned: false }));
+        assert!(matches!(
+            p(&["--enroll", "--preassigned"]),
+            Cmd::Enroll { preassigned: true }
+        ));
+        assert!(matches!(p(&["--ensure-running"]), Cmd::EnsureRunning));
+        assert!(matches!(p(&["--native-host"]), Cmd::NativeHost));
+        match p(&["--uninstall", "--otp", "123456"]) {
+            Cmd::Uninstall { otp } => assert_eq!(otp.as_deref(), Some("123456")),
+            _ => panic!("expected uninstall"),
+        }
+        assert!(matches!(p(&[]), Cmd::Run { restarted: false }));
+    }
+}

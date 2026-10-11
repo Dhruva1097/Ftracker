@@ -217,3 +217,27 @@ pub fn upload(
 fn now_stamp() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::location::GeoFix;
+
+    #[test]
+    fn employee_messages_have_no_coords_or_maps() {
+        let fix = GeoFix {
+            lat: 12.9716,
+            lon: 77.5946,
+            accuracy_m: 20.0,
+        };
+        let daily = employee_daily("11 Oct 2026", 7 * 3600 + 12 * 60, 8 * 3600);
+        assert!(!daily.contains("12.97"));
+        assert!(!daily.contains("maps.google"));
+        assert!(daily.contains("tracked time"));
+        let admin = hours_short_admin("Alice", "2026-10-10", 8 * 3600, 6 * 3600 + 10 * 60, Some(&fix));
+        assert!(admin.contains("loc="));
+        let emp = hours_short_employee(6 * 3600 + 10 * 60, 8 * 3600);
+        assert!(!emp.contains("loc="));
+        assert!(!emp.contains("maps.google"));
+    }
+}
