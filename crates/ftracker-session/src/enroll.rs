@@ -20,22 +20,62 @@ pub fn run(preassigned: bool) -> Result<()> {
     if preassigned {
         return preassigned_enroll();
     }
-    interactive_enroll()
+    interactive_enroll(false)
 }
 
-fn interactive_enroll() -> Result<()> {
+/// First `pnpm dev` / session start: enroll if needed, never fail the process for cancel/missing .env.
+pub fn ensure() -> Result<()> {
+    let _ = paths::ensure_data_dir();
+    if AppConfig::load().ok().filter(|c| c.is_registered()).is_some() {
+        return Ok(());
+    }
+    let pre = paths::payload_path()
+        .map(|p| p.exists())
+        .unwrap_or(false)
+        || paths::sibling("preassign.json").exists();
+    let r = if pre {
+        preassigned_enroll()
+    } else {
+        interactive_enroll(true)
+    };
+    match r {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("Ftracker enroll: {e:#}");
+            Ok(())
+        }
+    }
+}
+
+fn interactive_enroll(auto: bool) -> Result<()> {
     totp_dialog::info(
         "This PC records active work time, app titles, and location; samples the work screen while you are active (compressed pictures go only to the admin daily PDF); blocks USB storage; cancels Chrome/Edge uploads over 100MB until an admin authenticator code; starts at sign-in; sends a daily PDF to the admin. Local files are not deleted.",
     );
     let token = ftracker_core::config::env_telegram_token()
-        .or_else(|| required_input("Telegram bot token:").ok())
-        .ok_or_else(|| anyhow!("Telegram bot token required"))?;
+        .or_else(|| required_input("Telegram bot token:").ok());
+    let Some(token) = token else {
+        eprintln!(
+            "Ftracker: put TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID in .env, then run pnpm dev again."
+        );
+        return Ok(());
+    };
     let chat = ftracker_core::config::env_telegram_chat_id()
-        .or_else(|| required_input("Admin Telegram chat id:").ok())
-        .ok_or_else(|| anyhow!("Admin Telegram chat id required"))?;
-    let name = required_input("Employee name:")?;
-    let hours_s = required_input("Daily hours required (e.g. 8):")?;
-    let hours: f64 = hours_s.parse().unwrap_or(8.0);
+        .or_else(|| required_input("Admin Telegram chat id:").ok());
+    let Some(chat) = chat else {
+        return Ok(());
+    };
+    let name = if auto {
+        windows_user()
+    } else {
+        required_input("Employee name:")?
+    };
+    let hours = if auto {
+        8.0
+    } else {
+        required_input("Daily hours required (e.g. 8):")?
+            .parse()
+            .unwrap_or(8.0)
+    };
     let mut cfg = AppConfig::default();
     cfg.telegram_bot_token = token;
     cfg.telegram_admin_chat_id = chat;
@@ -76,15 +116,25 @@ fn finish_enroll(mut cfg: AppConfig, show_qr_locally: bool) -> Result<()> {
         totp_dialog::info(&format!(
             "Admin: scan this in Google Authenticator (or add the otpauth URL).\n\n{url}\n\n{qr}"
         ));
-        let code = totp_dialog::prompt("enroll").ok_or_else(|| anyhow!("TOTP cancelled"))?;
-        if !totp::verify(&cfg.totp_secret_b32, &code, chrono::Local::now().timestamp()) {
+        let mut ok = false;
+        for _ in 0..3 {
+            let Some(code) = totp_dialog::prompt("enroll") else {
+                return Ok(());
+            };
+            if totp::verify(&cfg.totp_secret_b32, &code, chrono::Local::now().timestamp()) {
+                ok = true;
+                break;
+            }
+            totp_dialog::error("That code did not match. Try the next 6-digit number from Authenticator.");
+        }
+        if !ok {
             let loc = location::current();
             let _ = client.send_admin(
                 &cfg.telegram_admin_chat_id,
                 &messages::install_failed(&cfg.machine_id, "totp_mismatch", loc.as_ref()),
                 loc.as_ref(),
             );
-            return Err(anyhow!("TOTP did not match"));
+            return Ok(());
         }
     } else {
         let _ = client.send_message(

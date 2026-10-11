@@ -29,11 +29,21 @@ fn main() {
         }
     };
     if let Err(e) = result {
-        let _ = tinyfiledialogs::message_box_ok(
-            "Ftracker",
-            &format!("{e:#}"),
-            tinyfiledialogs::MessageBoxIcon::Error,
-        );
-        std::process::exit(1);
+        let msg = format!("{e:#}");
+        eprintln!("Ftracker: {msg}");
+        #[cfg(not(debug_assertions))]
+        {
+            let _ = tinyfiledialogs::message_box_ok(
+                "Ftracker",
+                &msg,
+                tinyfiledialogs::MessageBoxIcon::Error,
+            );
+        }
+        let handled = msg.contains("not registered")
+            || msg.contains("enrol cancelled")
+            || msg.contains("cancelled");
+        if !handled {
+            std::process::exit(1);
+        }
     }
 }

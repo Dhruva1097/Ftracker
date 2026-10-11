@@ -1,0 +1,18 @@
+{
+  "title": "package.json",
+  "description": "Local npm package.json schema so the editor does not download SchemaStore.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "name": { "type": "string" },
+    "private": { "type": "boolean" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "packageManager": { "type": "string" },
+    "type": { "type": "string" },
+    "scripts": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

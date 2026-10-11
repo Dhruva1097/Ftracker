@@ -1,8 +1,9 @@
 {
+  "$schema": "./schemas/package.schema.json",
   "name": "ftracker",
   "private": true,
   "version": "1.0.0",
-  "description": "Ftracker Windows employee time tracker — pnpm is a task runner around Cargo/WiX only",
+  "description": "Ftracker Windows employee time tracker — pnpm is a task runner around Cargo/WiX only. No npm packages.",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "node scripts/Dev.mjs",

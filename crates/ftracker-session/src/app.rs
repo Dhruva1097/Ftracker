@@ -46,17 +46,33 @@ pub fn run(restarted: bool) -> Result<()> {
     mutex::acquire_or_exit();
     let cfg = match AppConfig::load() {
         Ok(c) if c.is_registered() => c,
-        Ok(_) => {
-            ui::totp_dialog::error("Ftracker is not registered. Run the installer enroll step.");
-            return Ok(());
-        }
-        Err(e) => {
-            let msg = format!("{e:#}");
-            if msg.contains("SECRETS_CORRUPT") || msg.contains("CryptUnprotect") {
-                // Best-effort: cannot send without token.
+        other => {
+            let corrupt = match &other {
+                Err(e) => {
+                    let msg = format!("{e:#}");
+                    msg.contains("SECRETS_CORRUPT") || msg.contains("CryptUnprotect")
+                }
+                Ok(_) => false,
+            };
+            if corrupt {
                 ui::totp_dialog::error("SECRETS_CORRUPT");
+                return Err(other.unwrap_err());
             }
-            return Err(e);
+            let _ = crate::enroll::ensure();
+            match AppConfig::load() {
+                Ok(c) if c.is_registered() => c,
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    let msg = format!("{e:#}");
+                    if msg.contains("not registered") {
+                        return Ok(());
+                    }
+                    if msg.contains("SECRETS_CORRUPT") || msg.contains("CryptUnprotect") {
+                        ui::totp_dialog::error("SECRETS_CORRUPT");
+                    }
+                    return Err(e);
+                }
+            }
         }
     };
     let store = match Store::open(&cfg) {

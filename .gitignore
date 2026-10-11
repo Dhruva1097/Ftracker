@@ -5,12 +5,14 @@
 .env.local
 packaging/msi/preassign.json
 packaging/msi/payload.json
-node_modules/
+node_modules/*
+!node_modules/.gitkeep
 .pnpm-store/
 dist/
 *.msi
 *.wixobj
 *.wixpdb
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 Thumbs.db
