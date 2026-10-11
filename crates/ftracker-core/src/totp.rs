@@ -70,6 +70,36 @@ pub fn qr_unicode(otpauth: &str) -> String {
     }
 }
 
+/// Square BGRA bitmap (top-down) with a 4-module quiet zone. `dim` is width and height.
+pub fn qr_bgra(otpauth: &str) -> Result<(u32, Vec<u8>)> {
+    let code = QrCode::new(otpauth.as_bytes()).map_err(|e| anyhow!("{e}"))?;
+    let modules = code.width() as u32;
+    let quiet = 4u32;
+    let inner = modules + quiet * 2;
+    let module_px = (248 / inner).max(4);
+    let dim = inner * module_px;
+    let mut buf = vec![255u8; (dim as usize) * (dim as usize) * 4];
+    for y in 0..modules {
+        for x in 0..modules {
+            if code[(x as usize, y as usize)] != qrcode::Color::Dark {
+                continue;
+            }
+            let x0 = (x + quiet) * module_px;
+            let y0 = (y + quiet) * module_px;
+            for dy in 0..module_px {
+                for dx in 0..module_px {
+                    let i = (((y0 + dy) * dim + (x0 + dx)) * 4) as usize;
+                    buf[i] = 0;
+                    buf[i + 1] = 0;
+                    buf[i + 2] = 0;
+                    buf[i + 3] = 255;
+                }
+            }
+        }
+    }
+    Ok((dim, buf))
+}
+
 pub fn recovery_codes() -> Vec<String> {
     let mut codes = Vec::new();
     let mut rng = rand::thread_rng();
@@ -106,5 +136,9 @@ mod tests {
         assert!(url.contains("secret=MFRGGZDFMZTWQ2LK"));
         assert!(!url.contains("bot"));
         assert!(!qr_unicode(&url).is_empty());
+        let (dim, px) = qr_bgra(&url).unwrap();
+        assert!(dim >= 160);
+        assert_eq!(px.len(), dim as usize * dim as usize * 4);
+        assert!(px.iter().any(|b| *b == 0), "QR must contain black modules");
     }
 }

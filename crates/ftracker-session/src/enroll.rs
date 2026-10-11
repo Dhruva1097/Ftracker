@@ -47,43 +47,26 @@ pub fn ensure() -> Result<()> {
     }
 }
 
-fn interactive_enroll(auto: bool) -> Result<()> {
-    totp_dialog::info(
-        "This PC records active work time, app titles, and location; samples the work screen while you are active (compressed pictures go only to the admin daily PDF); blocks USB storage; cancels Chrome/Edge uploads over 100MB until an admin authenticator code; starts at sign-in; sends a daily PDF to the admin. Local files are not deleted.",
-    );
-    let token = ftracker_core::config::env_telegram_token()
-        .or_else(|| required_input("Telegram bot token:").ok());
-    let Some(token) = token else {
-        eprintln!(
-            "Ftracker: put TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID in .env, then run pnpm dev again."
-        );
+fn interactive_enroll(_auto: bool) -> Result<()> {
+    let defaults = crate::ui::enroll_window::Defaults {
+        token: ftracker_core::config::env_telegram_token().unwrap_or_default(),
+        chat_id: ftracker_core::config::env_telegram_chat_id().unwrap_or_default(),
+        employee_name: windows_user(),
+        daily_hours: 8.0,
+        machine: hostname(),
+    };
+    let Some(form) = crate::ui::enroll_window::run(&defaults) else {
         return Ok(());
-    };
-    let chat = ftracker_core::config::env_telegram_chat_id()
-        .or_else(|| required_input("Admin Telegram chat id:").ok());
-    let Some(chat) = chat else {
-        return Ok(());
-    };
-    let name = if auto {
-        windows_user()
-    } else {
-        required_input("Employee name:")?
-    };
-    let hours = if auto {
-        8.0
-    } else {
-        required_input("Daily hours required (e.g. 8):")?
-            .parse()
-            .unwrap_or(8.0)
     };
     let mut cfg = AppConfig::default();
-    cfg.telegram_bot_token = token;
-    cfg.telegram_admin_chat_id = chat;
-    cfg.employee_name = name;
-    cfg.daily_hours_required = hours;
+    cfg.telegram_bot_token = form.token;
+    cfg.telegram_admin_chat_id = form.chat_id;
+    cfg.employee_name = form.employee_name;
+    cfg.daily_hours_required = form.daily_hours;
+    cfg.totp_secret_b32 = form.totp_secret_b32;
     cfg.db_key = AppConfig::new_db_key();
     cfg.machine_id = hostname();
-    finish_enroll(cfg, true)
+    finish_enroll(cfg)
 }
 
 fn preassigned_enroll() -> Result<()> {
@@ -94,59 +77,34 @@ fn preassigned_enroll() -> Result<()> {
         if alt.exists() {
             let cfg = AppConfig::from_preassign(&alt)?;
             let _ = std::fs::remove_file(&alt);
-            return finish_enroll(cfg, false);
+            return finish_enroll(cfg);
         }
         return Err(anyhow!("preassign payload missing"));
     }
     let cfg = AppConfig::from_preassign(&payload)?;
     let _ = std::fs::remove_file(&payload);
-    finish_enroll(cfg, false)
+    finish_enroll(cfg)
 }
 
-fn finish_enroll(mut cfg: AppConfig, show_qr_locally: bool) -> Result<()> {
-    cfg.totp_secret_b32 = totp::generate_secret_b32();
+fn finish_enroll(mut cfg: AppConfig) -> Result<()> {
+    if cfg.totp_secret_b32.is_empty() {
+        cfg.totp_secret_b32 = totp::generate_secret_b32();
+    }
     let (s_hash, svc_hash) = keepalive::hash_installed_exes()?;
     cfg.session_sha256 = s_hash;
     cfg.service_sha256 = svc_hash;
     let url = totp::otpauth_url(&cfg.employee_name, &cfg.machine_id, &cfg.totp_secret_b32);
-    let qr = totp::qr_unicode(&url);
     let recovery = totp::recovery_codes();
     let client = TelegramClient::new(cfg.telegram_bot_token.clone());
-    if show_qr_locally {
-        totp_dialog::info(&format!(
-            "Admin: scan this in Google Authenticator (or add the otpauth URL).\n\n{url}\n\n{qr}"
-        ));
-        let mut ok = false;
-        for _ in 0..3 {
-            let Some(code) = totp_dialog::prompt("enroll") else {
-                return Ok(());
-            };
-            if totp::verify(&cfg.totp_secret_b32, &code, chrono::Local::now().timestamp()) {
-                ok = true;
-                break;
-            }
-            totp_dialog::error("That code did not match. Try the next 6-digit number from Authenticator.");
-        }
-        if !ok {
-            let loc = location::current();
-            let _ = client.send_admin(
-                &cfg.telegram_admin_chat_id,
-                &messages::install_failed(&cfg.machine_id, "totp_mismatch", loc.as_ref()),
-                loc.as_ref(),
-            );
-            return Ok(());
-        }
-    } else {
-        let _ = client.send_message(
-            &cfg.telegram_admin_chat_id,
-            &format!(
-                "Ftracker TOTP enroll for {}@{}\nAdd in Google Authenticator:\n{url}\nRecovery codes: {}",
-                cfg.employee_name,
-                cfg.machine_id,
-                recovery.join(" ")
-            ),
-        );
-    }
+    let _ = client.send_message(
+        &cfg.telegram_admin_chat_id,
+        &format!(
+            "Ftracker TOTP enroll for {}@{}\nAdd in Google Authenticator:\n{url}\nRecovery codes: {}",
+            cfg.employee_name,
+            cfg.machine_id,
+            recovery.join(" ")
+        ),
+    );
     cfg.save()?;
     let _ = Store::open(&cfg);
     let loc = location::current();
@@ -160,13 +118,6 @@ fn finish_enroll(mut cfg: AppConfig, show_qr_locally: bool) -> Result<()> {
         ),
         loc.as_ref(),
     );
-    if show_qr_locally {
-        let _ = client.send_message(
-            &cfg.telegram_admin_chat_id,
-            &format!("Recovery codes for {}@{}: {}", cfg.employee_name, cfg.machine_id, recovery.join(" ")),
-        );
-    }
-    totp_dialog::info("This PC is registered. Tracking will start at the next sign-in.");
     Ok(())
 }
 
