@@ -258,6 +258,8 @@ pub fn command_list() -> String {
 @{{name}}\n\
   Live snapshot of that person: screenshot, location, apps, USB, CPU/RAM/disk, tracked time today.\n\
   {{name}} is the employee name or the Windows login.\n\n\
+@{{name}}_ss\n\
+  Screenshot only of that person’s current screen.\n\n\
 /list\n\
   Lists these commands.\n\
   Also: @list\n\n\
@@ -360,8 +362,8 @@ Open apps:\n\
 {apps}\n\n\
 External devices: {usb}\n\
 CPU: {}%\n\
-RAM: {} / {} MB\n\
-Disk {}: {:.1} / {:.1} GB\n\
+RAM: {} / {} GB\n\
+{}\n\
 {}",
         s.employee,
         s.windows_user,
@@ -372,12 +374,33 @@ Disk {}: {:.1} / {:.1} GB\n\
         s.fg_process,
         s.fg_title,
         s.cpu_pct,
-        s.ram_used_mb,
-        s.ram_total_mb,
-        s.disk_root,
-        s.disk_free_gb,
-        s.disk_total_gb,
+        fmt_gb(s.ram_used_mb),
+        fmt_gb(s.ram_total_mb),
+        fmt_drive(s),
         location_lines(s.loc.as_ref())
+    )
+}
+
+fn fmt_gb(mb: u64) -> String {
+    format!("{:.1}", mb as f64 / 1024.0)
+}
+
+fn fmt_drive(s: &LiveSnapshot) -> String {
+    let letter = s
+        .disk_root
+        .chars()
+        .next()
+        .unwrap_or('C')
+        .to_ascii_uppercase();
+    let used = (s.disk_total_gb - s.disk_free_gb).max(0.0).round() as i64;
+    let total = s.disk_total_gb.round() as i64;
+    format!("{letter} Drive: {used} Used / {total} GB")
+}
+
+pub fn screenshot_only_caption(employee: &str, pc: &str) -> String {
+    format!(
+        "Screenshot\n\nEmployee: {employee}\nPC: {pc}\nTime: {}",
+        now_stamp()
     )
 }
 
@@ -443,10 +466,14 @@ mod tests {
         assert!(live.contains("Employee: Alice"));
         assert!(live.contains("External devices: none"));
         assert!(live.contains("Location:"));
+        assert!(live.contains("RAM: 7.8 / 15.6 GB"));
+        assert!(!live.contains(" MB"));
+        assert!(live.contains("C Drive: 400 Used / 500 GB"));
         let list = command_list();
         assert!(list.contains("@online"));
         assert!(list.contains("@data"));
         assert!(list.contains("@{name}"));
+        assert!(list.contains("@{name}_ss"));
         assert!(list.contains("/list"));
     }
 }

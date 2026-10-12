@@ -9,7 +9,7 @@ pub struct GeoFix {
 
 impl GeoFix {
     pub fn fmt(&self) -> String {
-        format!("{:.4},{:.4} ±{:.0}m", self.lat, self.lon, self.accuracy_m)
+        format!("{:.6},{:.6} ±{:.0}m", self.lat, self.lon, self.accuracy_m)
     }
 
     pub fn maps_url(&self) -> String {

@@ -164,36 +164,257 @@ fn chip_size() -> (i32, i32) {
     (crate::ui::dpi::px(196), crate::ui::dpi::px(44))
 }
 
-/// Top-level chip on the work area. Win11 wallpaper WorkerW hides child windows.
 #[cfg(windows)]
-fn place_on_desktop(hwnd: HWND) {
+fn chip_rect() -> windows::Win32::Foundation::RECT {
     use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{
-        SetWindowPos, SystemParametersInfoW, HWND_TOPMOST, SPI_GETWORKAREA, SWP_NOACTIVATE,
-        SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+        SystemParametersInfoW, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
     };
-    if HIDDEN.load(Ordering::SeqCst) {
-        return;
-    }
+    let mut wa = RECT::default();
     unsafe {
-        let mut wa = RECT::default();
         let _ = SystemParametersInfoW(
             SPI_GETWORKAREA,
             0,
             Some((&mut wa as *mut RECT).cast()),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
         );
-        let (cw, ch) = chip_size();
-        let m = crate::ui::dpi::px(28);
-        let x = wa.right - cw - m;
-        let y = wa.bottom - ch - m;
+    }
+    let (cw, ch) = chip_size();
+    let m = crate::ui::dpi::px(28);
+    RECT {
+        left: wa.right - cw - m,
+        top: wa.bottom - ch - m,
+        right: wa.right - m,
+        bottom: wa.bottom - m,
+    }
+}
+
+#[cfg(windows)]
+fn rects_overlap(a: windows::Win32::Foundation::RECT, b: windows::Win32::Foundation::RECT) -> bool {
+    a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+}
+
+#[cfg(windows)]
+fn is_cloaked(hwnd: HWND) -> bool {
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+    let mut cloaked = 0u32;
+    unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED,
+            (&mut cloaked as *mut u32).cast(),
+            4,
+        )
+        .is_ok()
+            && cloaked != 0
+    }
+}
+
+#[cfg(windows)]
+fn window_class(hwnd: HWND) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::GetClassNameW;
+    let mut buf = [0u16; 96];
+    let n = unsafe { GetClassNameW(hwnd, &mut buf) } as usize;
+    if n == 0 {
+        String::new()
+    } else {
+        String::from_utf16_lossy(&buf[..n])
+    }
+}
+
+#[cfg(windows)]
+fn window_title(hwnd: HWND) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowTextW;
+    let mut buf = [0u16; 128];
+    let n = unsafe { GetWindowTextW(hwnd, &mut buf) } as usize;
+    if n == 0 {
+        String::new()
+    } else {
+        String::from_utf16_lossy(&buf[..n])
+    }
+}
+
+#[cfg(windows)]
+fn is_shell_desktop(hwnd: HWND) -> bool {
+    matches!(
+        window_class(hwnd).as_str(),
+        "Progman"
+            | "WorkerW"
+            | "SHELLDLL_DefView"
+            | "SysListView32"
+            | "Shell_TrayWnd"
+            | "Shell_SecondaryTrayWnd"
+            | "ForegroundStaging"
+            | "ApplicationManager_DesktopShellWindow"
+    )
+}
+
+#[cfg(windows)]
+fn is_ghost_host(hwnd: HWND) -> bool {
+    let class = window_class(hwnd);
+    matches!(
+        class.as_str(),
+        "Windows.UI.Core.CoreWindow"
+            | "XamlExplorerHostIslandWindow"
+            | "Xaml_WindowedPopupClass"
+            | "DummyDWMListenerWindow"
+            | "EdgeUiInputTopWndClass"
+            | "NativeHWNDHost"
+            | "IME"
+            | "MSCTFIME UI"
+            | "NarratorHelperWindow"
+            | "ForegroundStaging"
+    ) || class.starts_with("Windows.Internal.Shell")
+}
+
+#[cfg(windows)]
+fn desktop_in_front() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetParent, GetShellWindow, GetWindow, GW_OWNER,
+    };
+    unsafe {
+        let fg = GetForegroundWindow();
+        if fg.0 == 0 {
+            return true;
+        }
+        let mut h = fg;
+        for _ in 0..6 {
+            if h.0 == 0 {
+                break;
+            }
+            if is_shell_desktop(h) || h == GetShellWindow() {
+                return true;
+            }
+            let owner = GetWindow(h, GW_OWNER);
+            if owner.0 != 0 && is_shell_desktop(owner) {
+                return true;
+            }
+            h = GetParent(h);
+        }
+        false
+    }
+}
+
+#[cfg(windows)]
+fn mouse_on_chip(hwnd: HWND) -> bool {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, WindowFromPoint};
+    let mut pt = POINT::default();
+    unsafe {
+        if GetCursorPos(&mut pt).is_err() {
+            return false;
+        }
+        WindowFromPoint(pt) == hwnd
+    }
+}
+
+/// A real app (Cursor, Chrome, …) covering the chip corner — not shell/ghost hosts.
+#[cfg(windows)]
+fn app_covers_desktop_chip(self_hwnd: HWND, chip: windows::Win32::Foundation::RECT) -> bool {
+    use windows::Win32::Foundation::{BOOL, LPARAM, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowLongW, GetWindowRect, IsIconic, IsWindowVisible, GWL_EXSTYLE,
+        GWL_STYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_MINIMIZE, WS_VISIBLE,
+    };
+    struct Ctx {
+        self_hwnd: HWND,
+        chip: RECT,
+        hit: bool,
+    }
+    unsafe extern "system" fn cb(hwnd: HWND, lp: LPARAM) -> BOOL {
+        let ctx = &mut *(lp.0 as *mut Ctx);
+        if ctx.hit || hwnd == ctx.self_hwnd {
+            return BOOL(1);
+        }
+        if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() || is_cloaked(hwnd) {
+            return BOOL(1);
+        }
+        let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+        if (style & WS_VISIBLE.0) == 0 || (style & WS_MINIMIZE.0) != 0 {
+            return BOOL(1);
+        }
+        if (ex & WS_EX_TOOLWINDOW.0) != 0 || (ex & WS_EX_NOACTIVATE.0) != 0 {
+            return BOOL(1);
+        }
+        if is_shell_desktop(hwnd) || is_ghost_host(hwnd) {
+            return BOOL(1);
+        }
+        if window_title(hwnd).is_empty() {
+            return BOOL(1);
+        }
+        let mut rc = RECT::default();
+        if GetWindowRect(hwnd, &mut rc).is_err() {
+            return BOOL(1);
+        }
+        if rc.right - rc.left < 80 || rc.bottom - rc.top < 80 {
+            return BOOL(1);
+        }
+        if rects_overlap(rc, ctx.chip) {
+            ctx.hit = true;
+            return BOOL(0);
+        }
+        BOOL(1)
+    }
+    let mut ctx = Ctx {
+        self_hwnd,
+        chip,
+        hit: false,
+    };
+    unsafe {
+        let _ = EnumWindows(Some(cb), LPARAM(&mut ctx as *mut Ctx as isize));
+    }
+    ctx.hit
+}
+
+/// On the desktop wallpaper when nothing covers that corner. Hidden over apps.
+/// TOPMOST only while shown — otherwise Win11 leaves the chip behind the wallpaper.
+#[cfg(windows)]
+fn place_on_desktop(hwnd: HWND) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, ShowWindow, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE,
+    };
+    if HIDDEN.load(Ordering::SeqCst) {
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_NOTOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+        return;
+    }
+    let rc = chip_rect();
+    let show = desktop_in_front() || mouse_on_chip(hwnd) || !app_covers_desktop_chip(hwnd, rc);
+    if !show {
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_NOTOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+        return;
+    }
+    unsafe {
         let _ = SetWindowPos(
             hwnd,
             HWND_TOPMOST,
-            x,
-            y,
-            cw,
-            ch,
+            rc.left,
+            rc.top,
+            rc.right - rc.left,
+            rc.bottom - rc.top,
             SWP_NOACTIVATE | SWP_SHOWWINDOW,
         );
     }
@@ -209,7 +430,7 @@ pub fn run_message_loop(state: &mut SessionState, user_launch: bool) -> anyhow::
         CreateWindowExW, DispatchMessageW, GetMessageW, LoadCursorW, RegisterClassW, SetLayeredWindowAttributes,
         SetTimer, ShowWindow, TranslateMessage, CS_HREDRAW, CS_VREDRAW, IDC_ARROW, LWA_COLORKEY, MSG,
         SW_SHOWNOACTIVATE, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-        WS_POPUP, WS_VISIBLE,
+        WS_POPUP,
     };
 
     if user_launch {
@@ -239,7 +460,7 @@ pub fn run_message_loop(state: &mut SessionState, user_launch: bool) -> anyhow::
             WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
             PCWSTR(class.as_ptr()),
             windows::core::w!("Ftracker"),
-            WS_POPUP | WS_VISIBLE,
+            WS_POPUP,
             0,
             0,
             cw,
@@ -268,6 +489,7 @@ pub fn run_message_loop(state: &mut SessionState, user_launch: bool) -> anyhow::
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         }
         let _ = SetTimer(hwnd, 1, 1000, None);
+        let _ = SetTimer(hwnd, 2, 150, None);
     }
 
     let mut msg = MSG::default();
@@ -346,6 +568,14 @@ unsafe extern "system" fn wndproc(
             LRESULT(0)
         }
         x if x == WM_TIMER => {
+            if wparam.0 == 2 {
+                if take_show_signal() {
+                    show_chip(hwnd);
+                } else {
+                    place_on_desktop(hwnd);
+                }
+                return LRESULT(0);
+            }
             if take_show_signal() {
                 show_chip(hwnd);
             }
@@ -353,13 +583,6 @@ unsafe extern "system" fn wndproc(
                 s.on_timer();
                 if !HIDDEN.load(Ordering::SeqCst) {
                     let _ = windows::Win32::Graphics::Gdi::InvalidateRect(hwnd, None, false);
-                }
-            }
-            if wparam.0 == 1 && !HIDDEN.load(Ordering::SeqCst) {
-                static mut TICKS: u32 = 0;
-                TICKS = TICKS.wrapping_add(1);
-                if TICKS % 5 == 0 {
-                    place_on_desktop(hwnd);
                 }
             }
             LRESULT(0)

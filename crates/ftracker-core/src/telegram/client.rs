@@ -63,6 +63,7 @@ impl TelegramClient {
     pub fn send_location(&self, chat_id: &str, fix: &GeoFix) -> Result<()> {
         let lat = format!("{:.6}", fix.lat);
         let lon = format!("{:.6}", fix.lon);
+        let acc = format!("{:.0}", fix.accuracy_m.clamp(1.0, 1500.0));
         let resp = self
             .http()
             .post(self.url("sendLocation"))
@@ -70,6 +71,7 @@ impl TelegramClient {
                 ("chat_id", chat_id),
                 ("latitude", lat.as_str()),
                 ("longitude", lon.as_str()),
+                ("horizontal_accuracy", acc.as_str()),
             ])
             .send()?;
         let v: Value = resp.json().unwrap_or(Value::Null);
@@ -77,9 +79,18 @@ impl TelegramClient {
     }
 
     pub fn send_document(&self, chat_id: &str, filename: &str, bytes: &[u8], caption: &str) -> Result<()> {
+        let mime = if filename.rsplit('.').next().unwrap_or("").eq_ignore_ascii_case("pdf") {
+            "application/pdf"
+        } else if filename.rsplit('.').next().unwrap_or("").eq_ignore_ascii_case("jpg")
+            || filename.rsplit('.').next().unwrap_or("").eq_ignore_ascii_case("jpeg")
+        {
+            "image/jpeg"
+        } else {
+            "application/octet-stream"
+        };
         let part = multipart::Part::bytes(bytes.to_vec())
             .file_name(filename.to_string())
-            .mime_str("application/pdf")
+            .mime_str(mime)
             .unwrap_or_else(|_| multipart::Part::bytes(bytes.to_vec()).file_name(filename.to_string()));
         let form = multipart::Form::new()
             .text("chat_id", chat_id.to_string())

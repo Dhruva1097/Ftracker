@@ -23,13 +23,15 @@ const ERR_SLEEP: Duration = Duration::from_secs(20);
 const SNAPSHOT_DEBOUNCE: Duration = Duration::from_secs(15);
 const MONTH_PDF_DEBOUNCE: Duration = Duration::from_secs(45);
 const LIST_DEBOUNCE: Duration = Duration::from_secs(20);
-const LIVE_JPEG_WIDTH: u32 = 800;
-const LIVE_JPEG_QUALITY: u8 = 50;
+const LIVE_JPEG_WIDTH: u32 = 1920;
+const LIVE_JPEG_QUALITY: u8 = 90;
+const SHOT_DEBOUNCE: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdminCmd {
     Online,
     Snapshot,
+    Shot,
     MonthData,
     List,
 }
@@ -67,6 +69,11 @@ enum Job {
     },
     CommandList {
         chat: String,
+    },
+    ShotOnly {
+        chat: String,
+        employee: String,
+        pc: String,
     },
 }
 
@@ -154,6 +161,14 @@ fn poll_loop(cfg: AppConfig, client: TelegramClient, tx: Sender<AdminCmd>) {
                             fleet_cmd = true;
                             if commands::names_match(&name, &cfg.employee_name, &windows_user()) {
                                 if tx.send(AdminCmd::Snapshot).is_err() {
+                                    return;
+                                }
+                            }
+                        }
+                        Some(AdminCommand::WhoShot(name)) => {
+                            fleet_cmd = true;
+                            if commands::names_match(&name, &cfg.employee_name, &windows_user()) {
+                                if tx.send(AdminCmd::Shot).is_err() {
                                     return;
                                 }
                             }
@@ -259,6 +274,13 @@ fn worker_loop(client: TelegramClient, rx: Receiver<Job>) {
             Job::CommandList { chat } => {
                 let _ = client.send_message(&chat, &messages::command_list());
             }
+            Job::ShotOnly {
+                chat,
+                employee,
+                pc,
+            } => {
+                send_shot_only(&client, &chat, employee, pc);
+            }
         }
     }
 }
@@ -297,6 +319,19 @@ pub fn handle(session: &mut SessionState, jobs: &JobHandle, cmd: AdminCmd) {
                 tracked,
                 required,
                 cats,
+            });
+        }
+        AdminCmd::Shot => {
+            if let Some(prev) = session.last_snapshot {
+                if prev.elapsed() < SHOT_DEBOUNCE {
+                    return;
+                }
+            }
+            session.last_snapshot = Some(Instant::now());
+            let _ = jobs.0.send(Job::ShotOnly {
+                chat: session.cfg.telegram_admin_chat_id.clone(),
+                employee: session.cfg.employee_name.clone(),
+                pc: session.cfg.machine_id.clone(),
             });
         }
         AdminCmd::List => {
@@ -414,5 +449,17 @@ fn send_snapshot(
     if let Some(bytes) = jpeg {
         let caption = format!("Screenshot\nEmployee: {employee}\nPC: {pc}");
         let _ = client.send_photo(chat, "screenshot.jpg", &bytes, &caption);
+    }
+}
+
+fn send_shot_only(client: &TelegramClient, chat: &str, employee: String, pc: String) {
+    let caption = messages::screenshot_only_caption(&employee, &pc);
+    match screenshot::capture_jpeg(LIVE_JPEG_WIDTH, LIVE_JPEG_QUALITY) {
+        Ok(Some((bytes, _))) => {
+            let _ = client.send_photo(chat, "screenshot.jpg", &bytes, &caption);
+        }
+        _ => {
+            let _ = client.send_message(chat, &format!("{caption}\n(no screenshot)"));
+        }
     }
 }

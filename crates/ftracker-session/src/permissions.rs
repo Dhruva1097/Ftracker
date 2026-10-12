@@ -20,6 +20,7 @@ pub fn ensure_at_start() {
         let _ = thread::Builder::new().name("ft-perm".into()).spawn(|| {
             crate::location::ask_os();
             ask_winrt();
+            crate::location::refresh_now();
         });
     }
 }
@@ -94,9 +95,6 @@ fn ask_winrt() {
     use windows::Devices::Geolocation::Geolocator;
     if let Ok(op) = Geolocator::RequestAccessAsync() {
         let _ = op.get();
-    }
-    if let Ok(geo) = Geolocator::new() {
-        let _ = geo.AllowFallbackToConsentlessPositions();
     }
 }
 

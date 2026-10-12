@@ -138,7 +138,13 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
 
     let mut state = SessionState {
         chip_label: day_totals::chip_text(&store, cfg.daily_hours_required),
-        last_loc: location::current().or_else(|| store.last_location().ok().flatten()),
+        last_loc: location::current().or_else(|| {
+            store
+                .last_location()
+                .ok()
+                .flatten()
+                .filter(location::is_accurate)
+        }),
         hour_key: day_totals::current_hour_start(),
         idle: activity::idle::is_idle(cfg.idle_seconds),
         last_fg: activity::foreground::read(),

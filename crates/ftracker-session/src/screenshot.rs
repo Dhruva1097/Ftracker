@@ -81,7 +81,7 @@ fn encode(img: DynamicImage, max_width: u32, quality: u8) -> Result<Option<(Vec<
         img.resize(
             max_width,
             max_width * img.height() / img.width().max(1),
-            image::imageops::FilterType::Triangle,
+            image::imageops::FilterType::Lanczos3,
         )
     } else {
         img

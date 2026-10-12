@@ -45,11 +45,15 @@ export class Dev {
     ]);
     // Old session holds the mutex, so a second pnpm dev would not load this build.
     if (process.platform === "win32") {
-      try {
-        await this.runCommand("taskkill", ["/IM", "ftracker.exe", "/F"]);
-      } catch {
-        /* not running */
-      }
+      await new Promise((resolve) => {
+        const child = spawn("taskkill", ["/IM", "ftracker.exe", "/F"], {
+          cwd: this.root,
+          stdio: "ignore",
+          shell: true,
+        });
+        child.on("exit", () => resolve());
+        child.on("error", () => resolve());
+      });
     }
     const exe = path.join(
       this.root,

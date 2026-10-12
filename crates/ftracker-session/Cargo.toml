@@ -22,6 +22,7 @@ tinyfiledialogs.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Security_Authorization",
@@ -42,6 +43,7 @@ windows = { version = "0.52", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Controls",
     "Win32_Devices_Geolocation",
+    "Win32_NetworkManagement_WiFi",
     "Devices_Geolocation",
     "Foundation",
 ] }

@@ -9,6 +9,7 @@ pub enum AdminCommand {
     MonthData,
     List,
     Who(String),
+    WhoShot(String),
 }
 
 pub fn name_key(s: &str) -> String {
@@ -54,9 +55,28 @@ pub fn parse_command(text: &str) -> Option<AdminCommand> {
         if rest.is_empty() || rest.starts_with('@') {
             return None;
         }
-        return Some(AdminCommand::Who(rest.to_string()));
+        let (name, shot_only) = split_who(rest);
+        if name.is_empty() {
+            return None;
+        }
+        if shot_only {
+            return Some(AdminCommand::WhoShot(name));
+        }
+        return Some(AdminCommand::Who(name));
     }
     None
+}
+
+/// `@{name}_ss` → screenshot only. Suffix is case-insensitive.
+fn split_who(rest: &str) -> (String, bool) {
+    let t = rest.trim();
+    if t.len() > 3 {
+        let (head, tail) = t.split_at(t.len() - 3);
+        if tail.eq_ignore_ascii_case("_ss") {
+            return (head.trim().to_string(), true);
+        }
+    }
+    (t.to_string(), false)
 }
 
 fn is_cmd(tok: &str, name: &str) -> bool {
@@ -135,6 +155,18 @@ mod tests {
             Some(AdminCommand::Who("Alice Smith".into()))
         );
         assert_eq!(parse_command("@"), None);
+        assert_eq!(
+            parse_command("@Alice_ss"),
+            Some(AdminCommand::WhoShot("Alice".into()))
+        );
+        assert_eq!(
+            parse_command("@alice_SS"),
+            Some(AdminCommand::WhoShot("alice".into()))
+        );
+        assert_eq!(
+            parse_command("@Alice Smith_ss"),
+            Some(AdminCommand::WhoShot("Alice Smith".into()))
+        );
     }
 
     #[test]
