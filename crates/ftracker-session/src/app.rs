@@ -41,6 +41,9 @@ pub struct SessionState {
     ipc_tx: Sender<IpcMsg>,
     ipc_rx: Receiver<IpcMsg>,
     attendance_out_sent: bool,
+    pub last_snapshot: Option<Instant>,
+    admin_rx: Receiver<crate::admin_cmd::AdminCmd>,
+    admin_jobs: crate::admin_cmd::JobHandle,
 }
 
 pub fn run(restarted: bool) -> Result<()> {
@@ -122,6 +125,7 @@ pub fn run(restarted: bool) -> Result<()> {
     let (ipc_tx, ipc_from_thread) = mpsc::channel::<IpcMsg>();
     let (to_ipc, ipc_rx_thread) = mpsc::channel::<IpcMsg>();
     thread::spawn(move || ipc_loop(ipc_tx, ipc_rx_thread));
+    let (admin_rx, admin_jobs) = crate::admin_cmd::start(cfg.clone(), client.clone());
 
     let mut state = SessionState {
         chip_label: day_totals::chip_text(&store, cfg.daily_hours_required),
@@ -139,6 +143,9 @@ pub fn run(restarted: bool) -> Result<()> {
         ipc_tx: to_ipc,
         ipc_rx: ipc_from_thread,
         attendance_out_sent: false,
+        last_snapshot: None,
+        admin_rx,
+        admin_jobs,
     };
     state.on_start()?;
     ui::widget::run_message_loop(&mut state)
@@ -188,6 +195,13 @@ impl SessionState {
 
     pub fn on_timer(&mut self) {
         self.ticks = self.ticks.wrapping_add(1);
+        let admin_cmds: Vec<_> = std::iter::from_fn(|| self.admin_rx.try_recv().ok()).collect();
+        if !admin_cmds.is_empty() {
+            let jobs = self.admin_jobs.clone();
+            for cmd in admin_cmds {
+                crate::admin_cmd::handle(self, &jobs, cmd);
+            }
+        }
         self.poll_ipc();
         if self.ticks % 2 == 0 {
             self.tick_activity();

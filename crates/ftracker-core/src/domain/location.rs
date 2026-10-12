@@ -23,3 +23,11 @@ pub fn loc_text(fix: Option<&GeoFix>) -> String {
         None => "loc=unavailable".into(),
     }
 }
+
+/// Human-readable location block for admin Telegram messages.
+pub fn location_lines(fix: Option<&GeoFix>) -> String {
+    match fix {
+        Some(f) => format!("Location: {}\n{}", f.fmt(), loc_text(Some(f))),
+        None => "Location: unavailable".into(),
+    }
+}

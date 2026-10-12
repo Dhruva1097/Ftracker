@@ -78,6 +78,10 @@ pub fn payload_path() -> Result<PathBuf> {
     Ok(program_data()?.join("preassign.json"))
 }
 
+pub fn telegram_offset_path() -> Result<PathBuf> {
+    Ok(program_data()?.join("tg_offset.json"))
+}
+
 pub fn mutex_name() -> &'static str {
     "Local\\FtrackerSessionMutex"
 }

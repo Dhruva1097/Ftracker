@@ -1,4 +1,4 @@
-use crate::domain::location::{loc_text, GeoFix};
+use crate::domain::location::{loc_text, location_lines, GeoFix};
 use crate::domain::time::format_hm;
 use crate::VERSION;
 
@@ -46,10 +46,15 @@ pub fn attendance_in(
     reason: &str,
     loc: Option<&GeoFix>,
 ) -> String {
+    let title = if reason == "restart_after_kill" {
+        "Attendance — back online"
+    } else {
+        "Attendance — signed in"
+    };
     format!(
-        "ATTENDANCE_IN time={} employee={employee} windows_user={windows_user} pc={pc} reason={reason} version={VERSION} {}",
+        "{title}\n\nEmployee: {employee}\nWindows user: {windows_user}\nPC: {pc}\nTime: {}\nReason: {reason}\nVersion: {VERSION}\n{}",
         now_stamp(),
-        loc_text(loc)
+        location_lines(loc)
     )
 }
 
@@ -62,10 +67,10 @@ pub fn attendance_out(
     loc: Option<&GeoFix>,
 ) -> String {
     format!(
-        "ATTENDANCE_OUT time={} employee={employee} windows_user={windows_user} pc={pc} reason={reason} tracked_today={} version={VERSION} {}",
+        "Attendance — signed out\n\nEmployee: {employee}\nWindows user: {windows_user}\nPC: {pc}\nTime: {}\nReason: {reason}\nTracked today: {}\nVersion: {VERSION}\n{}",
         now_stamp(),
         format_hm(tracked_today_s),
-        loc_text(loc)
+        location_lines(loc)
     )
 }
 
@@ -241,6 +246,105 @@ pub fn upload(
     )
 }
 
+pub fn online_here(
+    employee: &str,
+    windows_user: &str,
+    pc: &str,
+    idle: bool,
+    loc: Option<&GeoFix>,
+) -> String {
+    let status = if idle { "idle" } else { "active" };
+    format!(
+        "I am online\n\nEmployee: {employee}\nWindows user: {windows_user}\nPC: {pc}\nStatus: {status}\nTime: {}\nVersion: {VERSION}\n{}",
+        now_stamp(),
+        location_lines(loc)
+    )
+}
+
+pub struct LiveSnapshot {
+    pub employee: String,
+    pub windows_user: String,
+    pub pc: String,
+    pub idle: bool,
+    pub tracked_today_s: i64,
+    pub required_s: i64,
+    pub cats: Vec<(String, i64)>,
+    pub fg_process: String,
+    pub fg_title: String,
+    pub apps: Vec<String>,
+    pub usb: Vec<String>,
+    pub cpu_pct: u32,
+    pub ram_used_mb: u64,
+    pub ram_total_mb: u64,
+    pub disk_root: String,
+    pub disk_free_gb: f64,
+    pub disk_total_gb: f64,
+    pub loc: Option<GeoFix>,
+}
+
+pub fn live_status(s: &LiveSnapshot) -> String {
+    let status = if s.idle { "idle" } else { "active" };
+    let mut cats = String::new();
+    for name in ["Browser", "IDE", "Office", "Other"] {
+        let sec = s
+            .cats
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| *v)
+            .unwrap_or(0);
+        cats.push_str(&format!("  {name}: {}\n", format_hm(sec)));
+    }
+    let apps = if s.apps.is_empty() {
+        "  none".into()
+    } else {
+        s.apps
+            .iter()
+            .map(|a| format!("  {a}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let usb = if s.usb.is_empty() {
+        "none".into()
+    } else {
+        s.usb.join(", ")
+    };
+    format!(
+        "Live status\n\n\
+Employee: {}\n\
+Windows user: {}\n\
+PC: {}\n\
+Time: {}\n\
+Status: {status}\n\
+Version: {VERSION}\n\n\
+Tracked today: {} / {}\n\
+{cats}\n\
+Foreground: {}\n\
+Window: {}\n\n\
+Open apps:\n\
+{apps}\n\n\
+External devices: {usb}\n\
+CPU: {}%\n\
+RAM: {} / {} MB\n\
+Disk {}: {:.1} / {:.1} GB\n\
+{}",
+        s.employee,
+        s.windows_user,
+        s.pc,
+        now_stamp(),
+        format_hm(s.tracked_today_s),
+        format_hm(s.required_s),
+        s.fg_process,
+        s.fg_title,
+        s.cpu_pct,
+        s.ram_used_mb,
+        s.ram_total_mb,
+        s.disk_root,
+        s.disk_free_gb,
+        s.disk_total_gb,
+        location_lines(s.loc.as_ref())
+    )
+}
+
 fn now_stamp() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
@@ -267,12 +371,41 @@ mod tests {
         assert!(!emp.contains("loc="));
         assert!(!emp.contains("maps.google"));
         let inn = attendance_in("Alice", "alice", "PC1", "sign_in", Some(&fix));
-        assert!(inn.contains("ATTENDANCE_IN"));
-        assert!(inn.contains("employee=Alice"));
-        assert!(inn.contains("loc="));
+        assert!(inn.contains("Attendance — signed in"));
+        assert!(inn.contains("Employee: Alice"));
+        assert!(inn.contains("Location:"));
         let out = attendance_out("Alice", "alice", "PC1", "logoff_or_shutdown", 7 * 3600, Some(&fix));
-        assert!(out.contains("ATTENDANCE_OUT"));
-        assert!(out.contains("tracked_today="));
-        assert!(out.contains("loc="));
+        assert!(out.contains("Attendance — signed out"));
+        assert!(out.contains("Tracked today:"));
+        assert!(out.contains("Location:"));
+        let inn_on = online_here("Alice", "alice", "PC1", false, Some(&fix));
+        assert!(inn_on.contains("I am online"));
+        assert!(inn_on.contains("Employee: Alice"));
+        assert!(inn_on.contains("Status: active"));
+        assert!(inn_on.contains("Location:"));
+        let live = live_status(&LiveSnapshot {
+            employee: "Alice".into(),
+            windows_user: "alice".into(),
+            pc: "PC1".into(),
+            idle: false,
+            tracked_today_s: 7 * 3600,
+            required_s: 8 * 3600,
+            cats: vec![("IDE".into(), 5 * 3600)],
+            fg_process: "Code.exe".into(),
+            fg_title: "ftracker".into(),
+            apps: vec!["chrome.exe".into()],
+            usb: vec![],
+            cpu_pct: 12,
+            ram_used_mb: 8000,
+            ram_total_mb: 16000,
+            disk_root: "C:".into(),
+            disk_free_gb: 100.0,
+            disk_total_gb: 500.0,
+            loc: Some(fix.clone()),
+        });
+        assert!(live.contains("Live status"));
+        assert!(live.contains("Employee: Alice"));
+        assert!(live.contains("External devices: none"));
+        assert!(live.contains("Location:"));
     }
 }
