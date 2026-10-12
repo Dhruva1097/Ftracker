@@ -77,7 +77,13 @@ impl AppConfig {
         if !path.exists() {
             return Err(anyhow!("not registered"));
         }
-        let bytes = crypto::unprotect_from_file(&path).context("SECRETS_CORRUPT")?;
+        let bytes = match crypto::unprotect_from_file(&path) {
+            Ok(b) => b,
+            Err(e) if paths::is_access_denied(&e) => {
+                return Err(e.context("not registered"));
+            }
+            Err(e) => return Err(e).context("SECRETS_CORRUPT"),
+        };
         let cfg: Self = serde_json::from_slice(&bytes).context("SECRETS_CORRUPT")?;
         Ok(cfg)
     }

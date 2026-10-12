@@ -43,7 +43,17 @@ pub fn protect_to_file(path: &Path, plain: &[u8]) -> Result<()> {
 }
 
 pub fn unprotect_from_file(path: &Path) -> Result<Vec<u8>> {
-    let blob = fs::read(path)?;
+    let blob = match fs::read(path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            if let Some(parent) = path.parent() {
+                let _ = crate::paths::apply_admin_acl(parent);
+            }
+            let _ = crate::paths::apply_admin_acl(path);
+            fs::read(path)?
+        }
+        Err(e) => return Err(e.into()),
+    };
     unprotect(&blob)
 }
 

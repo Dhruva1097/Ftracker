@@ -54,7 +54,9 @@ pub fn run(restarted: bool) -> Result<()> {
             let corrupt = match &other {
                 Err(e) => {
                     let msg = format!("{e:#}");
-                    msg.contains("SECRETS_CORRUPT") || msg.contains("CryptUnprotect")
+                    !msg.contains("os error 5")
+                        && !msg.contains("Access is denied")
+                        && (msg.contains("SECRETS_CORRUPT") || msg.contains("CryptUnprotect"))
                 }
                 Ok(_) => false,
             };

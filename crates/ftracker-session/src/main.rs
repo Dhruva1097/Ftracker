@@ -44,7 +44,9 @@ fn main() {
         }
         let handled = msg.contains("not registered")
             || msg.contains("enrol cancelled")
-            || msg.contains("cancelled");
+            || msg.contains("cancelled")
+            || msg.contains("os error 5")
+            || msg.contains("Access is denied");
         if !handled {
             std::process::exit(1);
         }

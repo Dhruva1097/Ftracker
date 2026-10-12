@@ -30,6 +30,13 @@ fn local_data() -> PathBuf {
     PathBuf::from(base).join(DIR_NAME)
 }
 
+fn file_readable_or_missing(path: &Path) -> bool {
+    if !path.exists() {
+        return true;
+    }
+    fs::read(path).is_ok()
+}
+
 fn probe_write(dir: &Path) -> bool {
     let probe = dir.join(".w");
     match fs::write(&probe, b"ok") {
@@ -45,7 +52,15 @@ fn pick_data_dir() -> Result<PathBuf> {
     let preferred = preferred_program_data();
     let _ = fs::create_dir_all(&preferred);
     apply_admin_acl(&preferred)?;
-    if probe_write(&preferred) {
+    let secrets = preferred.join("secrets.bin");
+    if secrets.exists() {
+        apply_admin_acl(&secrets)?;
+    }
+    let enc = preferred.join("ftracker.enc");
+    if enc.exists() {
+        apply_admin_acl(&enc)?;
+    }
+    if probe_write(&preferred) && file_readable_or_missing(&secrets) {
         return Ok(preferred);
     }
     let local = local_data();
@@ -118,10 +133,24 @@ fn current_account() -> String {
 
 /// SYSTEM + Administrators full, current user modify. Never deny Users — that ACE
 /// also blocks the logged-on session (deny wins over Administrators).
+///
+/// `(OI)(CI)` is directory-only. On files those grants are ignored and `/inheritance:r`
+/// can leave an empty DACL (Access is denied).
 pub fn apply_admin_acl(path: &Path) -> Result<()> {
     #[cfg(windows)]
     {
         let path_str = path.to_string_lossy().to_string();
+        let dir = path.is_dir();
+        let sys = if dir {
+            "SYSTEM:(OI)(CI)F"
+        } else {
+            "SYSTEM:F"
+        };
+        let admins = if dir {
+            "Administrators:(OI)(CI)F"
+        } else {
+            "Administrators:F"
+        };
         let _ = std::process::Command::new("icacls")
             .args([&path_str, "/remove:d", "Users"])
             .output();
@@ -129,16 +158,25 @@ pub fn apply_admin_acl(path: &Path) -> Result<()> {
             path_str.clone(),
             "/inheritance:r".into(),
             "/grant:r".into(),
-            "SYSTEM:(OI)(CI)F".into(),
+            sys.into(),
             "/grant:r".into(),
-            "Administrators:(OI)(CI)F".into(),
+            admins.into(),
         ];
         let account = current_account();
         if !account.is_empty() {
             args.push("/grant:r".into());
-            args.push(format!("{account}:(OI)(CI)M"));
+            if dir {
+                args.push(format!("{account}:(OI)(CI)M"));
+            } else {
+                args.push(format!("{account}:M"));
+            }
         }
         let _ = std::process::Command::new("icacls").args(&args).output();
     }
     Ok(())
+}
+
+pub fn is_access_denied(err: &impl std::fmt::Display) -> bool {
+    let s = err.to_string();
+    s.contains("os error 5") || s.contains("Access is denied")
 }
