@@ -14,6 +14,7 @@ chrono.workspace = true
 ftracker-core = { path = "../ftracker-core" }
 ftracker-ipc = { path = "../ftracker-ipc" }
 image.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tinyfiledialogs.workspace = true
@@ -36,8 +37,11 @@ windows = { version = "0.52", features = [
     "Win32_System_Pipes",
     "Win32_System_Registry",
     "Win32_System_Ole",
+    "Win32_System_Services",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Controls",
     "Win32_Devices_Geolocation",
+    "Devices_Geolocation",
+    "Foundation",
 ] }

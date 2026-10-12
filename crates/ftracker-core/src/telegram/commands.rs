@@ -6,6 +6,8 @@ pub const STALE_AFTER_SECS: i64 = 120;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdminCommand {
     Online,
+    MonthData,
+    List,
     Who(String),
 }
 
@@ -38,8 +40,14 @@ pub fn parse_command(text: &str) -> Option<AdminCommand> {
         return None;
     }
     let first = line.split_whitespace().next().unwrap_or("");
-    if slash_online(first) || at_online(first) {
+    if is_cmd(first, "online") {
         return Some(AdminCommand::Online);
+    }
+    if is_cmd(first, "data") {
+        return Some(AdminCommand::MonthData);
+    }
+    if is_cmd(first, "list") {
+        return Some(AdminCommand::List);
     }
     if let Some(rest) = line.strip_prefix('@') {
         let rest = rest.trim();
@@ -51,20 +59,18 @@ pub fn parse_command(text: &str) -> Option<AdminCommand> {
     None
 }
 
-fn slash_online(tok: &str) -> bool {
-    let rest = match tok.strip_prefix('/') {
-        Some(r) => r,
-        None => return false,
-    };
-    let cmd = rest.split('@').next().unwrap_or(rest);
-    cmd.eq_ignore_ascii_case("online")
-}
-
-fn at_online(tok: &str) -> bool {
-    match tok.strip_prefix('@') {
-        Some(rest) => rest.eq_ignore_ascii_case("online"),
-        None => false,
+fn is_cmd(tok: &str, name: &str) -> bool {
+    if let Some(rest) = tok.strip_prefix('/') {
+        return rest
+            .split('@')
+            .next()
+            .unwrap_or(rest)
+            .eq_ignore_ascii_case(name);
     }
+    if let Some(rest) = tok.strip_prefix('@') {
+        return rest.eq_ignore_ascii_case(name);
+    }
+    false
 }
 
 pub fn is_stale(message_date: i64, now: i64) -> bool {
@@ -108,6 +114,12 @@ mod tests {
         assert_eq!(parse_command("  @online please"), Some(AdminCommand::Online));
         assert_eq!(parse_command("/online"), Some(AdminCommand::Online));
         assert_eq!(parse_command("/online@MyBot"), Some(AdminCommand::Online));
+        assert_eq!(parse_command("@data"), Some(AdminCommand::MonthData));
+        assert_eq!(parse_command("/data"), Some(AdminCommand::MonthData));
+        assert_eq!(parse_command("@DATA please"), Some(AdminCommand::MonthData));
+        assert_eq!(parse_command("/list"), Some(AdminCommand::List));
+        assert_eq!(parse_command("@list"), Some(AdminCommand::List));
+        assert_eq!(parse_command("/list@MyBot"), Some(AdminCommand::List));
         assert_eq!(parse_command("hello"), None);
         assert_eq!(parse_command(""), None);
     }

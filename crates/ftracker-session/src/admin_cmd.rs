@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 
 use ftracker_core::config::{windows_user, AppConfig};
 use ftracker_core::paths;
-use ftracker_core::report::day_totals::{self, required_seconds};
+use ftracker_core::report::day_totals::{self, required_seconds, MonthDayRow};
+use ftracker_core::report::pdf;
 use ftracker_core::telegram::client::TelegramClient;
 use ftracker_core::telegram::commands::{self, AdminCommand};
 use ftracker_core::telegram::messages::{self, LiveSnapshot};
@@ -20,6 +21,8 @@ use crate::screenshot;
 const POLL_SLEEP: Duration = Duration::from_secs(20);
 const ERR_SLEEP: Duration = Duration::from_secs(20);
 const SNAPSHOT_DEBOUNCE: Duration = Duration::from_secs(15);
+const MONTH_PDF_DEBOUNCE: Duration = Duration::from_secs(45);
+const LIST_DEBOUNCE: Duration = Duration::from_secs(20);
 const LIVE_JPEG_WIDTH: u32 = 800;
 const LIVE_JPEG_QUALITY: u8 = 50;
 
@@ -27,6 +30,8 @@ const LIVE_JPEG_QUALITY: u8 = 50;
 pub enum AdminCmd {
     Online,
     Snapshot,
+    MonthData,
+    List,
 }
 
 enum Job {
@@ -49,6 +54,19 @@ enum Job {
         tracked: i64,
         required: i64,
         cats: Vec<(String, i64)>,
+    },
+    MonthPdf {
+        chat: String,
+        employee: String,
+        windows_user: String,
+        pc: String,
+        from: String,
+        to: String,
+        rows: Vec<MonthDayRow>,
+        cfg: AppConfig,
+    },
+    CommandList {
+        chat: String,
     },
 }
 
@@ -101,6 +119,8 @@ fn poll_loop(cfg: AppConfig, client: TelegramClient, tx: Sender<AdminCmd>) {
                 let now = chrono::Utc::now().timestamp();
                 let before = state.processed;
                 let conf_before = state.confirmed;
+                let mut fleet_cmd = false;
+                let mut list_id: Option<i64> = None;
                 for u in &updates {
                     if u.update_id <= state.processed {
                         continue;
@@ -113,11 +133,25 @@ fn poll_loop(cfg: AppConfig, client: TelegramClient, tx: Sender<AdminCmd>) {
                     }
                     match commands::parse_command(&u.text) {
                         Some(AdminCommand::Online) => {
+                            fleet_cmd = true;
                             if tx.send(AdminCmd::Online).is_err() {
                                 return;
                             }
                         }
+                        Some(AdminCommand::MonthData) => {
+                            fleet_cmd = true;
+                            if tx.send(AdminCmd::MonthData).is_err() {
+                                return;
+                            }
+                        }
+                        Some(AdminCommand::List) => {
+                            list_id = Some(u.update_id);
+                            if tx.send(AdminCmd::List).is_err() {
+                                return;
+                            }
+                        }
                         Some(AdminCommand::Who(name)) => {
+                            fleet_cmd = true;
                             if commands::names_match(&name, &cfg.employee_name, &windows_user()) {
                                 if tx.send(AdminCmd::Snapshot).is_err() {
                                     return;
@@ -127,6 +161,13 @@ fn poll_loop(cfg: AppConfig, client: TelegramClient, tx: Sender<AdminCmd>) {
                         None => {}
                     }
                     state.processed = state.processed.max(u.update_id);
+                }
+                // /list is the same on every PC — ack it now so the rest of the
+                // fleet does not send duplicate help, but never skip a live fleet command.
+                if !fleet_cmd {
+                    if let Some(id) = list_id {
+                        state.confirmed = state.confirmed.max(id);
+                    }
                 }
                 state.confirmed = commands::confirm_upto(
                     updates.iter().map(|u| (u.update_id, u.date)),
@@ -203,6 +244,21 @@ fn worker_loop(client: TelegramClient, rx: Receiver<Job>) {
                     cats,
                 );
             }
+            Job::MonthPdf {
+                chat,
+                employee,
+                windows_user,
+                pc,
+                from,
+                to,
+                rows,
+                cfg,
+            } => {
+                send_month_pdf(&client, &chat, employee, windows_user, pc, from, to, rows, &cfg);
+            }
+            Job::CommandList { chat } => {
+                let _ = client.send_message(&chat, &messages::command_list());
+            }
         }
     }
 }
@@ -242,6 +298,71 @@ pub fn handle(session: &mut SessionState, jobs: &JobHandle, cmd: AdminCmd) {
                 required,
                 cats,
             });
+        }
+        AdminCmd::List => {
+            if let Some(prev) = session.last_list {
+                if prev.elapsed() < LIST_DEBOUNCE {
+                    return;
+                }
+            }
+            session.last_list = Some(Instant::now());
+            let _ = jobs.0.send(Job::CommandList {
+                chat: session.cfg.telegram_admin_chat_id.clone(),
+            });
+        }
+        AdminCmd::MonthData => {
+            if let Some(prev) = session.last_month_pdf {
+                if prev.elapsed() < MONTH_PDF_DEBOUNCE {
+                    return;
+                }
+            }
+            session.last_month_pdf = Some(Instant::now());
+            let (from_d, to_d) = day_totals::last_month_bounds();
+            let from = from_d.format("%Y-%m-%d").to_string();
+            let to = to_d.format("%Y-%m-%d").to_string();
+            let rows = day_totals::collect_month_rows(&session.store, session.cfg.daily_hours_required);
+            let _ = jobs.0.send(Job::MonthPdf {
+                chat: session.cfg.telegram_admin_chat_id.clone(),
+                employee: session.cfg.employee_name.clone(),
+                windows_user: windows_user(),
+                pc: session.cfg.machine_id.clone(),
+                from,
+                to,
+                rows,
+                cfg: session.cfg.clone(),
+            });
+        }
+    }
+}
+
+fn send_month_pdf(
+    client: &TelegramClient,
+    chat: &str,
+    employee: String,
+    user: String,
+    pc: String,
+    from: String,
+    to: String,
+    rows: Vec<MonthDayRow>,
+    cfg: &AppConfig,
+) {
+    let tracked: i64 = rows.iter().map(|r| r.counted_s).sum();
+    let required: i64 = rows.iter().map(|r| r.required_s).sum();
+    let short_days = rows.iter().filter(|r| r.short).count();
+    let caption = messages::month_data_caption(
+        &employee, &user, &pc, &from, &to, tracked, required, short_days,
+    );
+    match pdf::build_month_pdf(cfg, &user, &from, &to, &rows) {
+        Ok(bytes) => {
+            let safe: String = employee
+                .chars()
+                .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                .collect();
+            let name = format!("ftracker-month-{safe}-{from}-to-{to}.pdf");
+            let _ = client.send_document(chat, &name, &bytes, &caption);
+        }
+        Err(_) => {
+            let _ = client.send_message(chat, &caption);
         }
     }
 }

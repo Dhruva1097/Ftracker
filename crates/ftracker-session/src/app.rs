@@ -21,7 +21,6 @@ use ftracker_ipc::protocol::IpcMsg;
 use crate::activity;
 use crate::keepalive;
 use crate::location;
-use crate::mutex;
 use crate::screenshot;
 use crate::ui;
 
@@ -42,12 +41,19 @@ pub struct SessionState {
     ipc_rx: Receiver<IpcMsg>,
     attendance_out_sent: bool,
     pub last_snapshot: Option<Instant>,
+    pub last_month_pdf: Option<Instant>,
+    pub last_list: Option<Instant>,
     admin_rx: Receiver<crate::admin_cmd::AdminCmd>,
     admin_jobs: crate::admin_cmd::JobHandle,
 }
 
-pub fn run(restarted: bool) -> Result<()> {
-    mutex::acquire_or_exit();
+pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
+    if crate::mutex::already_running() {
+        if user_launch {
+            ui::widget::request_show();
+        }
+        return Ok(());
+    }
     let cfg = match AppConfig::load() {
         Ok(c) if c.is_registered() => c,
         other => {
@@ -81,6 +87,7 @@ pub fn run(restarted: bool) -> Result<()> {
             }
         }
     };
+    crate::permissions::ensure_at_start();
     let store = match Store::open(&cfg) {
         Ok(s) => s,
         Err(e) => {
@@ -131,7 +138,7 @@ pub fn run(restarted: bool) -> Result<()> {
 
     let mut state = SessionState {
         chip_label: day_totals::chip_text(&store, cfg.daily_hours_required),
-        last_loc: location::current(),
+        last_loc: location::current().or_else(|| store.last_location().ok().flatten()),
         hour_key: day_totals::current_hour_start(),
         idle: activity::idle::is_idle(cfg.idle_seconds),
         last_fg: activity::foreground::read(),
@@ -146,11 +153,13 @@ pub fn run(restarted: bool) -> Result<()> {
         ipc_rx: ipc_from_thread,
         attendance_out_sent: false,
         last_snapshot: None,
+        last_month_pdf: None,
+        last_list: None,
         admin_rx,
         admin_jobs,
     };
     state.on_start()?;
-    ui::widget::run_message_loop(&mut state)
+    ui::widget::run_message_loop(&mut state, user_launch)
 }
 
 fn ipc_loop(tx: Sender<IpcMsg>, rx: Receiver<IpcMsg>) {
@@ -208,7 +217,7 @@ impl SessionState {
         if self.ticks % 2 == 0 {
             self.tick_activity();
         }
-        if self.ticks % self.cfg.location_interval_seconds.max(2) == 0 && !self.idle {
+        if self.ticks % self.cfg.location_interval_seconds.max(2) == 0 {
             self.refresh_location();
         }
         if self.ticks % (self.cfg.screenshot_minutes.max(1) * 60) == 0 && !self.idle {

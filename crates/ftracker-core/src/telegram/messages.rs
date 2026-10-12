@@ -246,6 +246,42 @@ pub fn upload(
     )
 }
 
+pub fn command_list() -> String {
+    format!(
+        "Ftracker admin commands\n\n\
+@online\n\
+  Every online PC replies that it is online (employee, Windows user, PC, status, location).\n\
+  Also: /online\n\n\
+@data\n\
+  Each online PC sends a PDF of the last 30 days of daily hours (date-wise table).\n\
+  Also: /data\n\n\
+@{{name}}\n\
+  Live snapshot of that person: screenshot, location, apps, USB, CPU/RAM/disk, tracked time today.\n\
+  {{name}} is the employee name or the Windows login.\n\n\
+/list\n\
+  Lists these commands.\n\
+  Also: @list\n\n\
+Version: {VERSION}"
+    )
+}
+
+pub fn month_data_caption(
+    employee: &str,
+    windows_user: &str,
+    pc: &str,
+    from: &str,
+    to: &str,
+    tracked_s: i64,
+    required_s: i64,
+    short_days: usize,
+) -> String {
+    format!(
+        "Monthly hours report (last 30 days)\n\nEmployee: {employee}\nWindows user: {windows_user}\nPC: {pc}\nPeriod: {from} to {to}\nTracked: {} of {}\nShort weekdays: {short_days}\nVersion: {VERSION}",
+        format_hm(tracked_s),
+        format_hm(required_s)
+    )
+}
+
 pub fn online_here(
     employee: &str,
     windows_user: &str,
@@ -407,5 +443,10 @@ mod tests {
         assert!(live.contains("Employee: Alice"));
         assert!(live.contains("External devices: none"));
         assert!(live.contains("Location:"));
+        let list = command_list();
+        assert!(list.contains("@online"));
+        assert!(list.contains("@data"));
+        assert!(list.contains("@{name}"));
+        assert!(list.contains("/list"));
     }
 }

@@ -38,12 +38,6 @@ pub fn already_running() -> bool {
     }
 }
 
-pub fn acquire_or_exit() {
-    if already_running() {
-        std::process::exit(0);
-    }
-}
-
 #[allow(dead_code)]
 pub fn hold_for_process() {
     let _ = HELD.load(Ordering::SeqCst);

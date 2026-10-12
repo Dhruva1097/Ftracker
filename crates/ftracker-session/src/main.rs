@@ -10,6 +10,7 @@ mod keepalive;
 mod location;
 mod mutex;
 mod native_host;
+mod permissions;
 mod screenshot;
 mod shutdown;
 mod ui;
@@ -20,16 +21,11 @@ fn main() {
     ftracker_core::config::load_dotenv();
     let cmd = cli::parse(std::env::args().skip(1).collect());
     let result = match cmd {
-        cli::Cmd::Run { restarted } => app::run(restarted),
+        cli::Cmd::Run { restarted } => app::run(restarted, true),
         cli::Cmd::Enroll { preassigned } => enroll::run(preassigned),
         cli::Cmd::Uninstall { otp } => uninstall::run(otp),
         cli::Cmd::NativeHost => native_host::run(),
-        cli::Cmd::EnsureRunning => {
-            if mutex::already_running() {
-                return;
-            }
-            app::run(true)
-        }
+        cli::Cmd::EnsureRunning => app::run(true, false),
     };
     if let Err(e) = result {
         let msg = format!("{e:#}");

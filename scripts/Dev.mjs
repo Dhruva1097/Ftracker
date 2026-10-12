@@ -43,6 +43,14 @@ export class Dev {
       "-p",
       "ftracker-service",
     ]);
+    // Old session holds the mutex, so a second pnpm dev would not load this build.
+    if (process.platform === "win32") {
+      try {
+        await this.runCommand("taskkill", ["/IM", "ftracker.exe", "/F"]);
+      } catch {
+        /* not running */
+      }
+    }
     const exe = path.join(
       this.root,
       "target",

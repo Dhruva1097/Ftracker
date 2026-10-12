@@ -97,8 +97,16 @@ pub fn telegram_offset_path() -> Result<PathBuf> {
     Ok(program_data()?.join("tg_offset.json"))
 }
 
+pub fn widget_hidden_path() -> Result<PathBuf> {
+    Ok(program_data()?.join("widget.off"))
+}
+
 pub fn mutex_name() -> &'static str {
     "Local\\FtrackerSessionMutex"
+}
+
+pub fn widget_show_event_name() -> &'static str {
+    "Local\\FtrackerWidgetShow"
 }
 
 pub fn this_exe() -> PathBuf {

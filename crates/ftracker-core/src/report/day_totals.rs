@@ -12,6 +12,74 @@ pub struct DayTotal {
     pub short: bool,
 }
 
+/// One calendar day in the last-month hours table.
+#[derive(Debug, Clone)]
+pub struct MonthDayRow {
+    pub day: String,
+    pub weekday: String,
+    pub counted_s: i64,
+    pub idle_s: i64,
+    pub required_s: i64,
+    pub weekend: bool,
+    pub short: bool,
+    pub browser_s: i64,
+    pub ide_s: i64,
+    pub office_s: i64,
+    pub other_s: i64,
+    pub loc_first: String,
+    pub loc_last: String,
+    pub loc_fixes: i64,
+    pub shots: u32,
+}
+
+pub fn last_month_bounds() -> (NaiveDate, NaiveDate) {
+    let to = Local::now().date_naive();
+    let from = to - Duration::days(29);
+    (from, to)
+}
+
+fn cat_named(cats: &[(String, i64)], name: &str) -> i64 {
+    cats.iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, v)| *v)
+        .unwrap_or(0)
+}
+
+pub fn collect_month_rows(store: &Store, daily_hours: f64) -> Vec<MonthDayRow> {
+    let req = required_seconds(daily_hours);
+    let (from, to) = last_month_bounds();
+    let mut rows = Vec::new();
+    let mut d = from;
+    while d <= to {
+        let day = d.format("%Y-%m-%d").to_string();
+        let counted = store.day_counted(&day).unwrap_or(0);
+        let idle = store.day_idle(&day).unwrap_or(0);
+        let cats = store.category_seconds(&day).unwrap_or_default();
+        let (a, b, n) = store.first_last_loc_day(&day).unwrap_or((None, None, 0));
+        let shots = store.screenshot_count_day(&day).unwrap_or(0);
+        let weekend = !is_weekday(d.weekday());
+        rows.push(MonthDayRow {
+            day,
+            weekday: d.format("%a").to_string(),
+            counted_s: counted,
+            idle_s: idle,
+            required_s: if weekend { 0 } else { req },
+            weekend,
+            short: !weekend && counted < req,
+            browser_s: cat_named(&cats, "Browser"),
+            ide_s: cat_named(&cats, "IDE"),
+            office_s: cat_named(&cats, "Office"),
+            other_s: cat_named(&cats, "Other"),
+            loc_first: fmt_loc_opt(a),
+            loc_last: fmt_loc_opt(b),
+            loc_fixes: n,
+            shots,
+        });
+        d += Duration::days(1);
+    }
+    rows
+}
+
 pub fn required_seconds(daily_hours: f64) -> i64 {
     (daily_hours * 3600.0).round() as i64
 }

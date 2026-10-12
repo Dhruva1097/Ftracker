@@ -54,10 +54,137 @@ pub fn run_as_service() -> Result<()> {
 }
 
 pub fn run_worker() {
+    enable_location_platform();
     integrity_loop_start();
     let ipc = thread::spawn(ipc_server::run);
     usb::run_watch();
     let _ = ipc.join();
+}
+
+/// Machine-wide location defaults (SYSTEM). User consent still happens in the session.
+fn enable_location_platform() {
+    #[cfg(windows)]
+    {
+        use windows::core::{w, PCWSTR};
+        use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
+        use windows::Win32::System::Services::{
+            CloseServiceHandle, OpenSCManagerW, OpenServiceW, StartServiceW, SC_MANAGER_CONNECT,
+            SERVICE_START,
+        };
+        set_sz(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
+            "Value",
+            "Allow",
+        );
+        set_sz(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged",
+            "Value",
+            "Allow",
+        );
+        set_dword(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}",
+            "SensorPermissionState",
+            1,
+        );
+        set_dword(
+            HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Services\lfsvc\Parameters",
+            "DisableStatus",
+            0,
+        );
+        unsafe {
+            if let Ok(scm) = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT) {
+                if let Ok(svc) = OpenServiceW(scm, w!("lfsvc"), SERVICE_START) {
+                    let _ = StartServiceW(svc, None);
+                    let _ = CloseServiceHandle(svc);
+                }
+                let _ = CloseServiceHandle(scm);
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn set_sz(
+    root: windows::Win32::System::Registry::HKEY,
+    path: &str,
+    name: &str,
+    value: &str,
+) {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegSetValueExW, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
+    };
+    let path_w: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let name_w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let data: Vec<u8> = path_w_to_sz(value);
+    unsafe {
+        let mut hkey = Default::default();
+        if RegCreateKeyExW(
+            root,
+            PCWSTR(path_w.as_ptr()),
+            0,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_WRITE,
+            None,
+            &mut hkey,
+            None,
+        )
+        .is_err()
+        {
+            return;
+        }
+        let _ = RegSetValueExW(hkey, PCWSTR(name_w.as_ptr()), 0, REG_SZ, Some(&data));
+        let _ = RegCloseKey(hkey);
+    }
+}
+
+#[cfg(windows)]
+fn set_dword(
+    root: windows::Win32::System::Registry::HKEY,
+    path: &str,
+    name: &str,
+    value: u32,
+) {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegSetValueExW, KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE,
+    };
+    let path_w: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let name_w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let data = value.to_le_bytes();
+    unsafe {
+        let mut hkey = Default::default();
+        if RegCreateKeyExW(
+            root,
+            PCWSTR(path_w.as_ptr()),
+            0,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_WRITE,
+            None,
+            &mut hkey,
+            None,
+        )
+        .is_err()
+        {
+            return;
+        }
+        let _ = RegSetValueExW(hkey, PCWSTR(name_w.as_ptr()), 0, REG_DWORD, Some(&data));
+        let _ = RegCloseKey(hkey);
+    }
+}
+
+#[cfg(windows)]
+fn path_w_to_sz(s: &str) -> Vec<u8> {
+    s.encode_utf16()
+        .chain(std::iter::once(0))
+        .flat_map(|u| u.to_le_bytes())
+        .collect()
 }
 
 fn integrity_loop_start() {

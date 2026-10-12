@@ -107,6 +107,7 @@ fn finish_enroll(mut cfg: AppConfig) -> Result<()> {
     );
     cfg.save()?;
     let _ = Store::open(&cfg);
+    crate::permissions::ensure_at_start();
     let loc = location::current();
     let _ = client.send_admin(
         &cfg.telegram_admin_chat_id,
@@ -131,6 +132,7 @@ fn reregister(mut cfg: AppConfig) -> Result<()> {
     let old = cfg.employee_name.clone();
     cfg.employee_name = new_name;
     cfg.save()?;
+    crate::permissions::ensure_at_start();
     let loc = location::current();
     let client = TelegramClient::new(cfg.telegram_bot_token.clone());
     let _ = client.send_admin(

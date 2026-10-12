@@ -522,6 +522,7 @@ dependencies = [
  "ftracker-core",
  "ftracker-ipc",
  "image",
+ "reqwest",
  "serde",
  "serde_json",
  "tinyfiledialogs",
