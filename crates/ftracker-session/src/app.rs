@@ -40,6 +40,7 @@ pub struct SessionState {
     pub totp_lock_until: Option<Instant>,
     ipc_tx: Sender<IpcMsg>,
     ipc_rx: Receiver<IpcMsg>,
+    attendance_out_sent: bool,
 }
 
 pub fn run(restarted: bool) -> Result<()> {
@@ -90,13 +91,33 @@ pub fn run(restarted: bool) -> Result<()> {
     };
     let client = TelegramClient::new(cfg.telegram_bot_token.clone());
     keepalive::check_service_integrity(&cfg, Some(&store), location::current().as_ref(), &client);
-    if restarted {
+    {
         let loc = location::current();
-        let _ = client.send_admin(
-            &cfg.telegram_admin_chat_id,
-            &messages::process_restarted(&cfg.employee_name, &cfg.machine_id, loc.as_ref()),
+        let reason = if restarted {
+            "restart_after_kill"
+        } else {
+            "sign_in"
+        };
+        let body = messages::attendance_in(
+            &cfg.employee_name,
+            &windows_user(),
+            &cfg.machine_id,
+            reason,
             loc.as_ref(),
         );
+        if client
+            .send_admin(&cfg.telegram_admin_chat_id, &body, loc.as_ref())
+            .is_err()
+        {
+            let q = ftracker_core::telegram::QueuedSend::admin(
+                cfg.telegram_admin_chat_id.clone(),
+                body,
+                loc.clone(),
+            );
+            if let Ok(payload) = serde_json::to_string(&q) {
+                let _ = store.enqueue_telegram("admin", &payload);
+            }
+        }
     }
     let (ipc_tx, ipc_from_thread) = mpsc::channel::<IpcMsg>();
     let (to_ipc, ipc_rx_thread) = mpsc::channel::<IpcMsg>();
@@ -117,6 +138,7 @@ pub fn run(restarted: bool) -> Result<()> {
         client,
         ipc_tx: to_ipc,
         ipc_rx: ipc_from_thread,
+        attendance_out_sent: false,
     };
     state.on_start()?;
     ui::widget::run_message_loop(&mut state)
@@ -204,7 +226,37 @@ impl SessionState {
         );
     }
 
-    pub fn flush_for_shutdown(&mut self) {
+    pub fn flush_for_shutdown_reason(&mut self, reason: &str) {
+        if !self.attendance_out_sent {
+            self.attendance_out_sent = true;
+            let loc = self.last_loc.clone().or_else(location::current);
+            let tracked = self
+                .store
+                .day_counted(&day_totals::today_iso())
+                .unwrap_or(0);
+            let body = messages::attendance_out(
+                &self.cfg.employee_name,
+                &windows_user(),
+                &self.cfg.machine_id,
+                reason,
+                tracked,
+                loc.as_ref(),
+            );
+            if self
+                .client
+                .send_admin(&self.cfg.telegram_admin_chat_id, &body, loc.as_ref())
+                .is_err()
+            {
+                let q = ftracker_core::telegram::QueuedSend::admin(
+                    self.cfg.telegram_admin_chat_id.clone(),
+                    body,
+                    loc.clone(),
+                );
+                if let Ok(payload) = serde_json::to_string(&q) {
+                    let _ = self.store.enqueue_telegram("admin", &payload);
+                }
+            }
+        }
         let _ = self.close_hour(false);
         let _ = self.build_and_queue_daily(&day_totals::today_iso());
         let _ = self.retry_outbox(true);
@@ -602,6 +654,19 @@ impl SessionState {
                 .is_ok();
             self.store
                 .mark_weekly(&week, &body, ok, if ok { "" } else { "retry" })?;
+        }
+        for (id, _kind, payload) in self.store.pending_telegram().unwrap_or_default() {
+            let ok = match serde_json::from_str::<ftracker_core::telegram::QueuedSend>(&payload) {
+                Ok(q) if q.employee_only => self.client.send_employee(&q.chat_id, &q.text).is_ok(),
+                Ok(q) => self
+                    .client
+                    .send_admin(&q.chat_id, &q.text, q.loc.as_ref())
+                    .is_ok(),
+                Err(_) => false,
+            };
+            if ok {
+                let _ = self.store.delete_telegram(id);
+            }
         }
         let _ = shutdown;
         self.store.persist()?;

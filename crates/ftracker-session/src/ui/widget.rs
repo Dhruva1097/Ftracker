@@ -173,20 +173,23 @@ unsafe extern "system" fn wndproc(
         }
         x if x == WM_QUERYENDSESSION => {
             if let Some(s) = state {
-                s.flush_for_shutdown();
+                s.flush_for_shutdown_reason("logoff_or_shutdown");
             }
             LRESULT(1)
         }
         x if x == WM_ENDSESSION => {
             if wparam.0 != 0 {
                 if let Some(s) = state {
-                    s.flush_for_shutdown();
+                    s.flush_for_shutdown_reason("logoff_or_shutdown");
                 }
                 PostQuitMessage(0);
             }
             LRESULT(0)
         }
         x if x == WM_DESTROY => {
+            if let Some(s) = state {
+                s.flush_for_shutdown_reason("session_end");
+            }
             PostQuitMessage(0);
             LRESULT(0)
         }

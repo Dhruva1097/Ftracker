@@ -112,13 +112,21 @@ fn maybe_outbox() {
         Err(_) => return,
     };
     let client = TelegramClient::new(cfg.telegram_bot_token.clone());
-    for (_id, _kind, payload) in store.pending_telegram().unwrap_or_default() {
-        if let Ok(q) = serde_json::from_str::<ftracker_core::telegram::QueuedSend>(&payload) {
+    for (id, _kind, payload) in store.pending_telegram().unwrap_or_default() {
+        let ok = if let Ok(q) = serde_json::from_str::<ftracker_core::telegram::QueuedSend>(&payload)
+        {
             if q.employee_only {
-                let _ = client.send_employee(&q.chat_id, &q.text);
+                client.send_employee(&q.chat_id, &q.text).is_ok()
             } else {
-                let _ = client.send_admin(&q.chat_id, &q.text, q.loc.as_ref());
+                client
+                    .send_admin(&q.chat_id, &q.text, q.loc.as_ref())
+                    .is_ok()
             }
+        } else {
+            false
+        };
+        if ok {
+            let _ = store.delete_telegram(id);
         }
     }
     for (hour, body) in store.unsent_hourly().unwrap_or_default() {

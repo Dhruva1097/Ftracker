@@ -36,8 +36,35 @@ pub fn uninstall_denied(pc: &str, windows_user: &str, loc: Option<&GeoFix>) -> S
 }
 
 pub fn process_restarted(employee: &str, pc: &str, loc: Option<&GeoFix>) -> String {
+    attendance_in(employee, "", pc, "restart_after_kill", loc)
+}
+
+pub fn attendance_in(
+    employee: &str,
+    windows_user: &str,
+    pc: &str,
+    reason: &str,
+    loc: Option<&GeoFix>,
+) -> String {
     format!(
-        "PROCESS_RESTARTED employee={employee} pc={pc} after=kill|crash delay=60s {}",
+        "ATTENDANCE_IN time={} employee={employee} windows_user={windows_user} pc={pc} reason={reason} version={VERSION} {}",
+        now_stamp(),
+        loc_text(loc)
+    )
+}
+
+pub fn attendance_out(
+    employee: &str,
+    windows_user: &str,
+    pc: &str,
+    reason: &str,
+    tracked_today_s: i64,
+    loc: Option<&GeoFix>,
+) -> String {
+    format!(
+        "ATTENDANCE_OUT time={} employee={employee} windows_user={windows_user} pc={pc} reason={reason} tracked_today={} version={VERSION} {}",
+        now_stamp(),
+        format_hm(tracked_today_s),
         loc_text(loc)
     )
 }
@@ -239,5 +266,13 @@ mod tests {
         let emp = hours_short_employee(6 * 3600 + 10 * 60, 8 * 3600);
         assert!(!emp.contains("loc="));
         assert!(!emp.contains("maps.google"));
+        let inn = attendance_in("Alice", "alice", "PC1", "sign_in", Some(&fix));
+        assert!(inn.contains("ATTENDANCE_IN"));
+        assert!(inn.contains("employee=Alice"));
+        assert!(inn.contains("loc="));
+        let out = attendance_out("Alice", "alice", "PC1", "logoff_or_shutdown", 7 * 3600, Some(&fix));
+        assert!(out.contains("ATTENDANCE_OUT"));
+        assert!(out.contains("tracked_today="));
+        assert!(out.contains("loc="));
     }
 }
