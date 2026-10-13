@@ -23,11 +23,17 @@
     </Condition>
     <MajorUpgrade DowngradeErrorMessage="A newer version of Ftracker is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <?ifdef Preassigned ?>
+    <Property Id="PREASSIGNED" Value="1" />
+    <?endif ?>
     <Feature Id="ProductFeature" Title="Ftracker" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentGroupRef Id="ServiceComponents" />
       <ComponentGroupRef Id="TaskComponents" />
       <ComponentGroupRef Id="ExtensionComponents" />
+      <?ifdef Preassigned ?>
+      <ComponentGroupRef Id="PreassignComponents" />
+      <?endif ?>
     </Feature>
     <UIRef Id="FtrackerUI" />
     <CustomAction Id="EnrollInteractive" FileKey="FtrackerExe" ExeCommand="--enroll" Execute="deferred" Impersonate="no" Return="check" />

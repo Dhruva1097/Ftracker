@@ -107,7 +107,10 @@ fn nid_base(hwnd: HWND, tip: &str) -> windows::Win32::UI::Shell::NOTIFYICONDATAW
         hIcon: tray_icon(),
         ..Default::default()
     };
-    fill_tip(&mut nid.szTip, tip);
+    // Copy through a local: NOTIFYICONDATAW is packed; `&mut nid.szTip` is unaligned on x86.
+    let mut tip_buf = [0u16; 128];
+    fill_tip(&mut tip_buf, tip);
+    nid.szTip = tip_buf;
     nid
 }
 

@@ -16,5 +16,12 @@
         <File Id="FtrackerIco" Source="!(bindpath.res)\ftracker.ico" KeyPath="yes" />
       </Component>
     </ComponentGroup>
+    <?ifdef Preassigned ?>
+    <ComponentGroup Id="PreassignComponents" Directory="INSTALLDIR">
+      <Component Id="PreassignJson" Guid="{A1B2C3D4-E5F6-4789-8A90-B1C2D3E4F5A6}" Win64="$(var.Win64)">
+        <File Id="PreassignFile" Source="!(bindpath.pre)\preassign.json" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+    <?endif ?>
   </Fragment>
 </Wix>
