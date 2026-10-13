@@ -17,7 +17,10 @@ static BUSY: AtomicBool = AtomicBool::new(false);
 
 /// Latest precise fix. Kicks a background refresh when the cache is stale.
 pub fn current() -> Option<GeoFix> {
-    let cached = LAST.lock().ok().and_then(|g| g.as_ref().map(|c| (c.at, c.fix.clone())));
+    let cached = LAST
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|c| (c.at, c.fix.clone())));
     let stale = match &cached {
         None => true,
         Some((at, _)) => at.elapsed() > Duration::from_secs(45),
@@ -110,7 +113,8 @@ fn ask_os_win() {
     const IID_LATLONG: GUID = GUID::from_u128(0x7fed806d_0ef8_4f07_80ac_36a0be16bb3b);
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let Ok(loc) = CoCreateInstance::<_, ILocation>(&Location, None, CLSCTX_INPROC_SERVER) else {
+        let Ok(loc) = CoCreateInstance::<_, ILocation>(&Location, None, CLSCTX_INPROC_SERVER)
+        else {
             return;
         };
         let _ = loc.RequestPermissions(HWND(0), &[IID_LATLONG], true);
@@ -181,7 +185,9 @@ fn ilocation_fix() -> Option<GeoFix> {
 #[cfg(windows)]
 fn ilocation_win() -> Option<GeoFix> {
     use windows::core::{ComInterface, GUID};
-    use windows::Win32::Devices::Geolocation::{ILatLongReport, ILocation, ILocationReport, Location};
+    use windows::Win32::Devices::Geolocation::{
+        ILatLongReport, ILocation, ILocationReport, Location,
+    };
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
     };

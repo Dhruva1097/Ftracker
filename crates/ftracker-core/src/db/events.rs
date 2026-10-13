@@ -99,7 +99,14 @@ impl Store {
         Ok(rows.filter_map(|x| x.ok()).collect())
     }
 
-    pub fn insert_screenshot(&self, ts: i64, day: &str, dhash: u64, process: &str, jpeg: &[u8]) -> Result<()> {
+    pub fn insert_screenshot(
+        &self,
+        ts: i64,
+        day: &str,
+        dhash: u64,
+        process: &str,
+        jpeg: &[u8],
+    ) -> Result<()> {
         self.conn().execute(
             "INSERT INTO screenshots(ts,day,dhash,process,jpeg) VALUES(?1,?2,?3,?4,?5)",
             params![ts, day, dhash as i64, process, jpeg],
@@ -132,9 +139,7 @@ impl Store {
         let mut stmt = self
             .conn()
             .prepare("SELECT ts, process, jpeg FROM screenshots WHERE day=?1 ORDER BY ts ASC")?;
-        let rows = stmt.query_map([day], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-        })?;
+        let rows = stmt.query_map([day], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         Ok(rows.filter_map(|x| x.ok()).collect())
     }
 }

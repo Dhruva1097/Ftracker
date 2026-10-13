@@ -99,12 +99,7 @@ fn ask_winrt() {
 }
 
 #[cfg(windows)]
-fn set_sz(
-    root: windows::Win32::System::Registry::HKEY,
-    path: &str,
-    name: &str,
-    value: &str,
-) {
+fn set_sz(root: windows::Win32::System::Registry::HKEY, path: &str, name: &str, value: &str) {
     use windows::core::PCWSTR;
     use windows::Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegSetValueExW, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
@@ -135,12 +130,7 @@ fn set_sz(
 }
 
 #[cfg(windows)]
-fn set_dword(
-    root: windows::Win32::System::Registry::HKEY,
-    path: &str,
-    name: &str,
-    value: u32,
-) {
+fn set_dword(root: windows::Win32::System::Registry::HKEY, path: &str, name: &str, value: u32) {
     use windows::core::PCWSTR;
     use windows::Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegSetValueExW, KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE,
@@ -177,8 +167,5 @@ fn wide(s: &str) -> Vec<u16> {
 
 #[cfg(windows)]
 fn sz_bytes(s: &str) -> Vec<u8> {
-    wide(s)
-        .into_iter()
-        .flat_map(|u| u.to_le_bytes())
-        .collect()
+    wide(s).into_iter().flat_map(|u| u.to_le_bytes()).collect()
 }

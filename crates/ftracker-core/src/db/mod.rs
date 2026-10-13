@@ -53,9 +53,9 @@ impl Store {
             return Ok(());
         }
         let days: Vec<String> = {
-            let mut stmt = self.conn().prepare(
-                "SELECT day FROM daily_reports WHERE telegram_ok=1 ORDER BY day ASC",
-            )?;
+            let mut stmt = self
+                .conn()
+                .prepare("SELECT day FROM daily_reports WHERE telegram_ok=1 ORDER BY day ASC")?;
             let rows = stmt.query_map([], |r| r.get(0))?;
             rows.filter_map(|x| x.ok()).collect()
         };

@@ -39,9 +39,9 @@ impl Store {
     }
 
     pub fn unsent_daily(&self) -> Result<Vec<(String, Vec<u8>)>> {
-        let mut stmt = self
-            .conn()
-            .prepare("SELECT day, pdf FROM daily_reports WHERE telegram_ok=0 AND pdf IS NOT NULL")?;
+        let mut stmt = self.conn().prepare(
+            "SELECT day, pdf FROM daily_reports WHERE telegram_ok=0 AND pdf IS NOT NULL",
+        )?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
         Ok(rows.filter_map(|x| x.ok()).collect())
     }
@@ -76,8 +76,10 @@ impl Store {
     }
 
     pub fn mark_hours_short_sent(&self, day: &str) -> Result<()> {
-        self.conn()
-            .execute("INSERT OR IGNORE INTO hours_short_sent(day) VALUES(?1)", [day])?;
+        self.conn().execute(
+            "INSERT OR IGNORE INTO hours_short_sent(day) VALUES(?1)",
+            [day],
+        )?;
         Ok(())
     }
 

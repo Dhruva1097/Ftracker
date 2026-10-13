@@ -102,7 +102,9 @@ fn get_text(hwnd: windows::Win32::Foundation::HWND) -> String {
     if n <= 0 {
         return String::new();
     }
-    String::from_utf16_lossy(&buf[..n as usize]).trim().to_string()
+    String::from_utf16_lossy(&buf[..n as usize])
+        .trim()
+        .to_string()
 }
 
 #[cfg(windows)]
@@ -118,7 +120,7 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Gdi::{
-        CreateFontW, CreateSolidBrush, DeleteObject, HBITMAP, HGDIOBJ, HFONT,
+        CreateFontW, CreateSolidBrush, DeleteObject, HBITMAP, HFONT, HGDIOBJ,
     };
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::Controls::{
@@ -126,10 +128,10 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         AdjustWindowRect, CreateWindowExW, DispatchMessageW, GetMessageW, GetSystemMetrics,
-        IsDialogMessageW, LoadCursorW, RegisterClassW, SendMessageW, ShowWindow,
-        TranslateMessage, CS_HREDRAW, CS_VREDRAW, IDC_ARROW, MSG, SM_CXSCREEN, SM_CYSCREEN,
-        SW_SHOW, WM_SETFONT, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPED,
-        WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_EX_APPWINDOW, WS_EX_CONTROLPARENT,
+        IsDialogMessageW, LoadCursorW, RegisterClassW, SendMessageW, ShowWindow, TranslateMessage,
+        CS_HREDRAW, CS_VREDRAW, IDC_ARROW, MSG, SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, WM_SETFONT,
+        WNDCLASSW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_APPWINDOW, WS_EX_CONTROLPARENT,
+        WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
     };
 
     let _ = unsafe {
@@ -212,11 +214,96 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
     }
     crate::ui::logo::apply(hwnd);
 
-    let font = unsafe { CreateFontW(-dpi::px(16), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_title = unsafe { CreateFontW(-dpi::px(24), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_small = unsafe { CreateFontW(-dpi::px(13), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_code = unsafe { CreateFontW(-dpi::px(22), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_btn = unsafe { CreateFontW(-dpi::px(16), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
+    let font = unsafe {
+        CreateFontW(
+            -dpi::px(16),
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_title = unsafe {
+        CreateFontW(
+            -dpi::px(24),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_small = unsafe {
+        CreateFontW(
+            -dpi::px(13),
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_code = unsafe {
+        CreateFontW(
+            -dpi::px(22),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_btn = unsafe {
+        CreateFontW(
+            -dpi::px(16),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
 
     let mut state = EnrollState {
         token_val: defaults.token.clone(),
@@ -285,12 +372,34 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
         let mut y = p(108);
         if show_token {
             label("Telegram bot token", p(28), y, hwnd, inst_h);
-            state.token = field("", p(28), y + p(20), p(430), p(40), hwnd, IDC_TOKEN, inst_h, false, false);
+            state.token = field(
+                "",
+                p(28),
+                y + p(20),
+                p(430),
+                p(40),
+                hwnd,
+                IDC_TOKEN,
+                inst_h,
+                false,
+                false,
+            );
             y += p(80);
         }
         if show_chat {
             label("Admin Telegram chat id", p(28), y, hwnd, inst_h);
-            state.chat = field("", p(28), y + p(20), p(430), p(40), hwnd, IDC_CHAT, inst_h, false, false);
+            state.chat = field(
+                "",
+                p(28),
+                y + p(20),
+                p(430),
+                p(40),
+                hwnd,
+                IDC_CHAT,
+                inst_h,
+                false,
+                false,
+            );
             y += p(80);
         }
         label("Employee name", p(28), y, hwnd, inst_h);
@@ -307,11 +416,39 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
             false,
         );
         label("Daily hours", p(324), y, hwnd, inst_h);
-        state.hours = field(&hours_s, p(324), y + p(20), p(134), p(40), hwnd, IDC_HOURS, inst_h, false, false);
+        state.hours = field(
+            &hours_s,
+            p(324),
+            y + p(20),
+            p(134),
+            p(40),
+            hwnd,
+            IDC_HOURS,
+            inst_h,
+            false,
+            false,
+        );
         y += p(80);
 
-        label("Authenticator secret (if you cannot scan)", p(28), y, hwnd, inst_h);
-        state.secret_box = field("", p(28), y + p(20), p(430), p(40), hwnd, IDC_SECRET, inst_h, true, false);
+        label(
+            "Authenticator secret (if you cannot scan)",
+            p(28),
+            y,
+            hwnd,
+            inst_h,
+        );
+        state.secret_box = field(
+            "",
+            p(28),
+            y + p(20),
+            p(430),
+            p(40),
+            hwnd,
+            IDC_SECRET,
+            inst_h,
+            true,
+            false,
+        );
         y += p(64);
 
         state.status = ctrl(
@@ -357,7 +494,18 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
             inst_h,
         );
         label("6-digit code", p(500), p(404), hwnd, inst_h);
-        state.code = field("", p(500), p(424), p(156), p(40), hwnd, IDC_CODE, inst_h, false, true);
+        state.code = field(
+            "",
+            p(500),
+            p(424),
+            p(156),
+            p(40),
+            hwnd,
+            IDC_CODE,
+            inst_h,
+            false,
+            true,
+        );
         SendMessageW(
             state.code,
             0x00C5,
@@ -469,7 +617,10 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
 }
 
 #[cfg(windows)]
-fn apply_label_fonts(parent: windows::Win32::Foundation::HWND, font: windows::Win32::Graphics::Gdi::HFONT) {
+fn apply_label_fonts(
+    parent: windows::Win32::Foundation::HWND,
+    font: windows::Win32::Graphics::Gdi::HFONT,
+) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, SendMessageW, WM_SETFONT};
     let mut child = HWND(0);
@@ -556,23 +707,11 @@ unsafe extern "system" fn field_proc(
             let mut rc = RECT::default();
             let _ = GetClientRect(hwnd, &mut rc);
             let edit = windows::Win32::Foundation::HWND(get_user_data(hwnd));
-            let focused = windows::Win32::UI::Input::KeyboardAndMouse::GetFocus().0 == edit.0
-                && edit.0 != 0;
-            let border = if focused {
-                theme::PRIMARY
-            } else {
-                theme::LINE
-            };
+            let focused =
+                windows::Win32::UI::Input::KeyboardAndMouse::GetFocus().0 == edit.0 && edit.0 != 0;
+            let border = if focused { theme::PRIMARY } else { theme::LINE };
             let t = if focused { dpi::px(2) } else { dpi::px(1) };
-            crate::ui::chrome::paint(
-                hdc,
-                rc,
-                dpi::px(10),
-                theme::SURFACE,
-                border,
-                t,
-                theme::BG,
-            );
+            crate::ui::chrome::paint(hdc, rc, dpi::px(10), theme::SURFACE, border, t, theme::BG);
             EndPaint(hwnd, &ps);
             LRESULT(0)
         }
@@ -682,11 +821,18 @@ fn field(
 fn rebuild_qr(state: &mut EnrollState) {
     use windows::Win32::Graphics::Gdi::{DeleteObject, InvalidateRect, HGDIOBJ};
     let name = get_text(state.name);
-    let name = if name.is_empty() { "employee".into() } else { name };
+    let name = if name.is_empty() {
+        "employee".into()
+    } else {
+        name
+    };
     let url = totp::otpauth_url(&name, &state.machine, &state.secret);
     set_text(
         state.account,
-        &format!("Admin scan — Google Authenticator\nFtracker:{name}@{}", state.machine),
+        &format!(
+            "Admin scan — Google Authenticator\nFtracker:{name}@{}",
+            state.machine
+        ),
     );
     let target = (dpi::px(QR_BOX) - dpi::px(24)).max(160) as u32;
     let Ok((dim, bgra)) = totp::qr_bgra_fit(&url, target) else {
@@ -725,17 +871,8 @@ fn dib(bgra: &[u8], dim: i32) -> Option<windows::Win32::Graphics::Gdi::HBITMAP> 
         ..Default::default()
     };
     let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
-    let hbmp = unsafe {
-        CreateDIBSection(
-            HDC(0),
-            &info,
-            DIB_RGB_COLORS,
-            &mut bits,
-            HANDLE(0),
-            0,
-        )
-        .ok()?
-    };
+    let hbmp =
+        unsafe { CreateDIBSection(HDC(0), &info, DIB_RGB_COLORS, &mut bits, HANDLE(0), 0).ok()? };
     if !bits.is_null() {
         unsafe {
             std::ptr::copy_nonoverlapping(bgra.as_ptr(), bits as *mut u8, bgra.len());
@@ -855,7 +992,11 @@ fn draw_button(state: &EnrollState, dis: &windows::Win32::UI::Controls::DRAWITEM
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, windows::Win32::Foundation::COLORREF(fg));
         let _ = SelectObject(hdc, HGDIOBJ(state.font_btn.0));
-        let label = if primary { "Register this PC" } else { "Cancel" };
+        let label = if primary {
+            "Register this PC"
+        } else {
+            "Cancel"
+        };
         let text: Vec<u16> = label.encode_utf16().collect();
         let mut sz = windows::Win32::Foundation::SIZE::default();
         let _ = GetTextExtentPoint32W(hdc, &text, &mut sz);
@@ -875,8 +1016,8 @@ unsafe extern "system" fn wndproc(
     use windows::Win32::Foundation::{HWND, LRESULT};
     use windows::Win32::Graphics::Gdi::{SetBkMode, SetTextColor, HDC, TRANSPARENT};
     use windows::Win32::UI::WindowsAndMessaging::{
-        DefWindowProcW, DestroyWindow, GetDlgCtrlID, PostQuitMessage, WM_CLOSE, WM_COMMAND,
-        WM_CTLCOLORSTATIC, WM_DESTROY, EN_CHANGE,
+        DefWindowProcW, DestroyWindow, GetDlgCtrlID, PostQuitMessage, EN_CHANGE, WM_CLOSE,
+        WM_COMMAND, WM_CTLCOLORSTATIC, WM_DESTROY,
     };
     let ptr = get_user_data(hwnd);
     let state = if ptr != 0 {
@@ -916,7 +1057,9 @@ unsafe extern "system" fn wndproc(
         }
         x if x == windows::Win32::UI::WindowsAndMessaging::WM_PAINT => {
             use windows::Win32::Foundation::RECT;
-            use windows::Win32::Graphics::Gdi::{BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, HGDIOBJ};
+            use windows::Win32::Graphics::Gdi::{
+                BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, HGDIOBJ,
+            };
             use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
             let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
             let hdc = BeginPaint(hwnd, &mut ps);

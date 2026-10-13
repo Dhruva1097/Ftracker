@@ -142,12 +142,7 @@ pub fn is_iso_weekday(day: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn weekday_totals(
-    store: &Store,
-    from: &str,
-    to: &str,
-    daily_hours: f64,
-) -> Vec<DayTotal> {
+pub fn weekday_totals(store: &Store, from: &str, to: &str, daily_hours: f64) -> Vec<DayTotal> {
     let req = required_seconds(daily_hours);
     store
         .days_in_range(from, to)
@@ -269,7 +264,9 @@ pub fn weekly_body(
     let mut lines = Vec::new();
     let labels = ["Mon", "Tue", "Wed", "Thu", "Fri"];
     for i in 0..5 {
-        let day = (mon + Duration::days(i as i64)).format("%Y-%m-%d").to_string();
+        let day = (mon + Duration::days(i as i64))
+            .format("%Y-%m-%d")
+            .to_string();
         let got = days
             .iter()
             .find(|(d, _, _)| d == &day)

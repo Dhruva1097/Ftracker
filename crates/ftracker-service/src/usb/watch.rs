@@ -141,11 +141,11 @@ fn is_hotplug_or_port_storage(letter: char) -> bool {
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
-    use windows::Win32::System::IO::DeviceIoControl;
     use windows::Win32::System::Ioctl::{
-        IOCTL_STORAGE_QUERY_PROPERTY, PropertyStandardQuery, STORAGE_DEVICE_DESCRIPTOR,
-        STORAGE_PROPERTY_QUERY, StorageDeviceProperty,
+        PropertyStandardQuery, StorageDeviceProperty, IOCTL_STORAGE_QUERY_PROPERTY,
+        STORAGE_DEVICE_DESCRIPTOR, STORAGE_PROPERTY_QUERY,
     };
+    use windows::Win32::System::IO::DeviceIoControl;
     #[repr(C)]
     struct HotplugInfo {
         size: u32,

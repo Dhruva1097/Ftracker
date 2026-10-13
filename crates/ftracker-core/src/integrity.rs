@@ -107,11 +107,7 @@ pub struct IntegrityFinding {
 }
 
 /// Cross-check the peer exe against the hash stored at enroll.
-pub fn check_peer(
-    path: &Path,
-    expected_sha: &str,
-    file_label: &str,
-) -> Option<IntegrityFinding> {
+pub fn check_peer(path: &Path, expected_sha: &str, file_label: &str) -> Option<IntegrityFinding> {
     if expected_sha.is_empty() {
         return None;
     }

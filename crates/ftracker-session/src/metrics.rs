@@ -202,7 +202,9 @@ pub fn removable_volumes() -> Vec<String> {
             };
             let letter = String::from_utf16_lossy(&buf[start..i]);
             let name_end = label.iter().position(|&c| c == 0).unwrap_or(label.len());
-            let name = String::from_utf16_lossy(&label[..name_end]).trim().to_string();
+            let name = String::from_utf16_lossy(&label[..name_end])
+                .trim()
+                .to_string();
             if name.is_empty() {
                 out.push(letter.trim_end_matches('\\').to_string());
             } else {

@@ -26,12 +26,14 @@ pub fn run(preassigned: bool) -> Result<()> {
 /// First `pnpm dev` / session start: enroll if needed, never fail the process for cancel/missing .env.
 pub fn ensure() -> Result<()> {
     let _ = paths::ensure_data_dir();
-    if AppConfig::load().ok().filter(|c| c.is_registered()).is_some() {
+    if AppConfig::load()
+        .ok()
+        .filter(|c| c.is_registered())
+        .is_some()
+    {
         return Ok(());
     }
-    let pre = paths::payload_path()
-        .map(|p| p.exists())
-        .unwrap_or(false)
+    let pre = paths::payload_path().map(|p| p.exists()).unwrap_or(false)
         || paths::sibling("preassign.json").exists();
     let r = if pre {
         preassigned_enroll()
@@ -124,7 +126,11 @@ fn finish_enroll(mut cfg: AppConfig) -> Result<()> {
 
 fn reregister(mut cfg: AppConfig) -> Result<()> {
     let code = totp_dialog::prompt("reregister").ok_or_else(|| anyhow!("cancelled"))?;
-    if !totp::verify(&cfg.totp_secret_b32, &code, chrono::Local::now().timestamp()) {
+    if !totp::verify(
+        &cfg.totp_secret_b32,
+        &code,
+        chrono::Local::now().timestamp(),
+    ) {
         totp_dialog::error("TOTP did not match. Employee name unchanged.");
         return Ok(());
     }

@@ -21,12 +21,8 @@ pub fn build_daily_pdf(store: &Store, cfg: &AppConfig, day: &str) -> Result<Vec<
     let shots = store.screenshots_day(day).unwrap_or_default();
     let timeline = store.timeline_day(day).unwrap_or_default();
 
-    let (doc, page1, layer1) = PdfDocument::new(
-        format!("Ftracker {day}"),
-        Mm(210.0),
-        Mm(297.0),
-        "Layer 1",
-    );
+    let (doc, page1, layer1) =
+        PdfDocument::new(format!("Ftracker {day}"), Mm(210.0), Mm(297.0), "Layer 1");
     let font = doc.add_builtin_font(BuiltinFont::Helvetica)?;
     let font_b = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
     let layer = doc.get_page(page1).get_layer(layer1);
@@ -139,13 +135,7 @@ pub fn build_daily_pdf(store: &Store, cfg: &AppConfig, day: &str) -> Result<Vec<
                 .single()
                 .map(|t| t.format("%H:%M").to_string())
                 .unwrap_or_default();
-            current_layer.use_text(
-                format!("{t} {process}"),
-                7.0,
-                Mm(x),
-                Mm(y - 30.0),
-                &font,
-            );
+            current_layer.use_text(format!("{t} {process}"), 7.0, Mm(x), Mm(y - 30.0), &font);
             let _ = (i, thumb_w, thumb_row_y);
         }
         x += 48.0;
@@ -172,13 +162,7 @@ pub fn build_daily_pdf(store: &Store, cfg: &AppConfig, day: &str) -> Result<Vec<
             .single()
             .map(|t| t.format("%H:%M:%S").to_string())
             .unwrap_or_default();
-        current_layer.use_text(
-            format!("{t}  {process}"),
-            9.0,
-            Mm(12.0),
-            Mm(y),
-            &font,
-        );
+        current_layer.use_text(format!("{t}  {process}"), 9.0, Mm(12.0), Mm(y), &font);
         y -= 5.0;
         if let Ok(img) = ::image::load_from_memory(jpeg) {
             let (w, h) = ::image::GenericImageView::dimensions(&img);
@@ -320,10 +304,22 @@ pub fn build_month_pdf(
     y -= 8.0;
 
     let headers = [
-        "Date", "Day", "Tracked", "Required", "Idle", "Status", "Browser", "IDE", "Office",
-        "Other", "Shots", "Location first / last",
+        "Date",
+        "Day",
+        "Tracked",
+        "Required",
+        "Idle",
+        "Status",
+        "Browser",
+        "IDE",
+        "Office",
+        "Other",
+        "Shots",
+        "Location first / last",
     ];
-    let widths: [f64; 12] = [24.0, 14.0, 20.0, 20.0, 16.0, 20.0, 18.0, 16.0, 18.0, 16.0, 14.0, 57.0];
+    let widths: [f64; 12] = [
+        24.0, 14.0, 20.0, 20.0, 16.0, 20.0, 18.0, 16.0, 18.0, 16.0, 14.0, 57.0,
+    ];
     let left = 12.0;
     let row_h = 6.2;
     let table_w: f64 = widths.iter().sum();

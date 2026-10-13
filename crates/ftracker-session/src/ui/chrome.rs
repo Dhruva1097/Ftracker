@@ -6,7 +6,11 @@ use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Gdi::HDC;
 
 fn unpack(c: u32) -> (u8, u8, u8) {
-    ((c & 0xff) as u8, ((c >> 8) & 0xff) as u8, ((c >> 16) & 0xff) as u8)
+    (
+        (c & 0xff) as u8,
+        ((c >> 8) & 0xff) as u8,
+        ((c >> 16) & 0xff) as u8,
+    )
 }
 
 fn mix(a: u8, b: u8, t: f32) -> u8 {
@@ -26,7 +30,15 @@ fn cover(sd: f32) -> f32 {
     (0.5 - sd).clamp(0.0, 1.0)
 }
 
-fn raster(w: i32, h: i32, radius: i32, fill: u32, border: u32, border_px: i32, backdrop: u32) -> Vec<u8> {
+fn raster(
+    w: i32,
+    h: i32,
+    radius: i32,
+    fill: u32,
+    border: u32,
+    border_px: i32,
+    backdrop: u32,
+) -> Vec<u8> {
     let w = w.max(1);
     let h = h.max(1);
     let hx = w as f32 * 0.5;
@@ -44,11 +56,7 @@ fn raster(w: i32, h: i32, radius: i32, fill: u32, border: u32, border_px: i32, b
             let outer = sd_round_box(px, py, hx, hy, r);
             let oc = cover(outer);
             let (cr, cg, cb) = if bw <= 0.0 {
-                (
-                    mix(br, fr, oc),
-                    mix(bg, fg, oc),
-                    mix(bb, fb, oc),
-                )
+                (mix(br, fr, oc), mix(bg, fg, oc), mix(bb, fb, oc))
             } else {
                 let inner = sd_round_box(
                     px,
@@ -62,11 +70,7 @@ fn raster(w: i32, h: i32, radius: i32, fill: u32, border: u32, border_px: i32, b
                 let t0r = mix(br, er, bc);
                 let t0g = mix(bg, eg, bc);
                 let t0b = mix(bb, eb, bc);
-                (
-                    mix(t0r, fr, ic),
-                    mix(t0g, fg, ic),
-                    mix(t0b, fb, ic),
-                )
+                (mix(t0r, fr, ic), mix(t0g, fg, ic), mix(t0b, fb, ic))
             };
             let i = ((y * w + x) * 4) as usize;
             out[i] = cb;

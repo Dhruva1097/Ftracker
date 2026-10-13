@@ -108,12 +108,7 @@ fn enable_location_platform() {
 }
 
 #[cfg(windows)]
-fn set_sz(
-    root: windows::Win32::System::Registry::HKEY,
-    path: &str,
-    name: &str,
-    value: &str,
-) {
+fn set_sz(root: windows::Win32::System::Registry::HKEY, path: &str, name: &str, value: &str) {
     use windows::core::PCWSTR;
     use windows::Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegSetValueExW, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
@@ -144,12 +139,7 @@ fn set_sz(
 }
 
 #[cfg(windows)]
-fn set_dword(
-    root: windows::Win32::System::Registry::HKEY,
-    path: &str,
-    name: &str,
-    value: u32,
-) {
+fn set_dword(root: windows::Win32::System::Registry::HKEY, path: &str, name: &str, value: u32) {
     use windows::core::PCWSTR;
     use windows::Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegSetValueExW, KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE,
@@ -240,18 +230,18 @@ fn maybe_outbox() {
     };
     let client = TelegramClient::new(cfg.telegram_bot_token.clone());
     for (id, _kind, payload) in store.pending_telegram().unwrap_or_default() {
-        let ok = if let Ok(q) = serde_json::from_str::<ftracker_core::telegram::QueuedSend>(&payload)
-        {
-            if q.employee_only {
-                client.send_employee(&q.chat_id, &q.text).is_ok()
+        let ok =
+            if let Ok(q) = serde_json::from_str::<ftracker_core::telegram::QueuedSend>(&payload) {
+                if q.employee_only {
+                    client.send_employee(&q.chat_id, &q.text).is_ok()
+                } else {
+                    client
+                        .send_admin(&q.chat_id, &q.text, q.loc.as_ref())
+                        .is_ok()
+                }
             } else {
-                client
-                    .send_admin(&q.chat_id, &q.text, q.loc.as_ref())
-                    .is_ok()
-            }
-        } else {
-            false
-        };
+                false
+            };
         if ok {
             let _ = store.delete_telegram(id);
         }

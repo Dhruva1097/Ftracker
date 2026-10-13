@@ -70,8 +70,14 @@ mod tests {
 
     #[test]
     fn maps_known_processes() {
-        assert_eq!(AppCategory::from_process("chrome.exe"), AppCategory::Browser);
-        assert_eq!(AppCategory::from_process(r"C:\Program Files\code.exe"), AppCategory::Ide);
+        assert_eq!(
+            AppCategory::from_process("chrome.exe"),
+            AppCategory::Browser
+        );
+        assert_eq!(
+            AppCategory::from_process(r"C:\Program Files\code.exe"),
+            AppCategory::Ide
+        );
         assert_eq!(AppCategory::from_process("EXCEL.EXE"), AppCategory::Office);
         assert_eq!(AppCategory::from_process("notepad.exe"), AppCategory::Other);
     }

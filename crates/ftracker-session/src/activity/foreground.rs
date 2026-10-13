@@ -9,9 +9,12 @@ pub struct Foreground {
 pub fn read() -> Foreground {
     use windows::Win32::Foundation::{CloseHandle, MAX_PATH};
     use windows::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
+    };
     let hwnd = unsafe { GetForegroundWindow() };
     if hwnd.0 == 0 {
         return Foreground::default();
@@ -26,7 +29,14 @@ pub fn read() -> Foreground {
         if let Ok(h) = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
             let mut buf = [0u16; MAX_PATH as usize];
             let mut len = buf.len() as u32;
-            let ok = unsafe { QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len) };
+            let ok = unsafe {
+                QueryFullProcessImageNameW(
+                    h,
+                    PROCESS_NAME_WIN32,
+                    windows::core::PWSTR(buf.as_mut_ptr()),
+                    &mut len,
+                )
+            };
             if ok.is_ok() {
                 process = String::from_utf16_lossy(&buf[..len as usize]);
             }

@@ -44,7 +44,11 @@ pub fn clear_session_pipe() {
 }
 
 pub fn is_allowed(serial: &str) -> bool {
-    allow().lock().ok().map(|s| s.contains(serial)).unwrap_or(false)
+    allow()
+        .lock()
+        .ok()
+        .map(|s| s.contains(serial))
+        .unwrap_or(false)
 }
 
 pub fn allow_serial(serial: &str) {

@@ -24,7 +24,10 @@ pub fn check_service_integrity(
     if let Some(find) = integrity::check_peer(&path, &cfg.service_sha256, "ftracker.exe") {
         let hour = ftracker_core::report::day_totals::current_hour_start();
         let already = store
-            .and_then(|s| s.integrity_alert_logged(&find.file, &find.reason, &hour).ok())
+            .and_then(|s| {
+                s.integrity_alert_logged(&find.file, &find.reason, &hour)
+                    .ok()
+            })
             .unwrap_or(false);
         if !already {
             let text = messages::integrity_fail(

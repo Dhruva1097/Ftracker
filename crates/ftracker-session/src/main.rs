@@ -2,12 +2,13 @@
 
 mod activity;
 mod admin_cmd;
+mod admin_fs;
 mod app;
 mod cli;
-mod metrics;
 mod enroll;
 mod keepalive;
 mod location;
+mod metrics;
 mod mutex;
 mod native_host;
 mod permissions;

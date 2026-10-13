@@ -23,10 +23,7 @@ fn purpose_copy(purpose: &str) -> (&'static str, &'static str) {
             "Change employee",
             "Enter the admin authenticator code to change the registered employee.",
         ),
-        _ => (
-            "Ftracker",
-            "Enter the admin authenticator code.",
-        ),
+        _ => ("Ftracker", "Enter the admin authenticator code."),
     }
 }
 
@@ -56,7 +53,8 @@ pub fn info(msg: &str) {
 }
 
 pub fn error(msg: &str) {
-    let _ = tinyfiledialogs::message_box_ok("Ftracker", msg, tinyfiledialogs::MessageBoxIcon::Error);
+    let _ =
+        tinyfiledialogs::message_box_ok("Ftracker", msg, tinyfiledialogs::MessageBoxIcon::Error);
 }
 
 #[allow(dead_code)]
@@ -126,14 +124,16 @@ fn prompt_win(purpose: &str, detail: &str) -> Option<String> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Gdi::{CreateFontW, CreateSolidBrush, DeleteObject, HGDIOBJ};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::UI::Controls::{InitCommonControlsEx, ICC_WIN95_CLASSES, INITCOMMONCONTROLSEX};
+    use windows::Win32::UI::Controls::{
+        InitCommonControlsEx, ICC_WIN95_CLASSES, INITCOMMONCONTROLSEX,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
         AdjustWindowRect, CreateWindowExW, DispatchMessageW, GetMessageW, GetSystemMetrics,
         IsDialogMessageW, LoadCursorW, RegisterClassW, SendMessageW, SetForegroundWindow,
-        SetWindowPos, ShowWindow, TranslateMessage, CS_HREDRAW, CS_VREDRAW, IDC_ARROW,
-        SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_STYLE, WM_SETFONT, WNDCLASSW, WS_CAPTION,
-        WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
-        WS_EX_APPWINDOW, WS_EX_CONTROLPARENT, WS_EX_TOPMOST,
+        SetWindowPos, ShowWindow, TranslateMessage, CS_HREDRAW, CS_VREDRAW, IDC_ARROW, SM_CXSCREEN,
+        SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_STYLE, WM_SETFONT, WNDCLASSW, WS_CAPTION, WS_CHILD,
+        WS_CLIPCHILDREN, WS_EX_APPWINDOW, WS_EX_CONTROLPARENT, WS_EX_TOPMOST, WS_OVERLAPPED,
+        WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
     };
 
     let (title, body) = purpose_copy(purpose);
@@ -217,10 +217,78 @@ fn prompt_win(purpose: &str, detail: &str) -> Option<String> {
     }
     crate::ui::logo::apply(hwnd);
 
-    let font = unsafe { CreateFontW(-dpi::px(15), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_title = unsafe { CreateFontW(-dpi::px(20), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_code = unsafe { CreateFontW(-dpi::px(22), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_btn = unsafe { CreateFontW(-dpi::px(15), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
+    let font = unsafe {
+        CreateFontW(
+            -dpi::px(15),
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_title = unsafe {
+        CreateFontW(
+            -dpi::px(20),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_code = unsafe {
+        CreateFontW(
+            -dpi::px(22),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_btn = unsafe {
+        CreateFontW(
+            -dpi::px(15),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
 
     let pad = dpi::px(24);
     let mut y = dpi::px(20);
@@ -436,7 +504,9 @@ fn prompt_win(purpose: &str, detail: &str) -> Option<String> {
         let _ = DeleteObject(HGDIOBJ(font_btn.0));
         let _ = DeleteObject(HGDIOBJ(bg.0));
     }
-    accepted.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    accepted
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 #[cfg(windows)]
@@ -542,7 +612,9 @@ fn get_text(hwnd: windows::Win32::Foundation::HWND) -> String {
     if n <= 0 {
         return String::new();
     }
-    String::from_utf16_lossy(&buf[..n as usize]).trim().to_string()
+    String::from_utf16_lossy(&buf[..n as usize])
+        .trim()
+        .to_string()
 }
 
 #[cfg(windows)]
@@ -582,13 +654,9 @@ unsafe extern "system" fn field_proc(
             let mut rc = RECT::default();
             let _ = GetClientRect(hwnd, &mut rc);
             let edit = windows::Win32::Foundation::HWND(get_user_data(hwnd));
-            let focused = windows::Win32::UI::Input::KeyboardAndMouse::GetFocus().0 == edit.0
-                && edit.0 != 0;
-            let border = if focused {
-                theme::PRIMARY
-            } else {
-                theme::LINE
-            };
+            let focused =
+                windows::Win32::UI::Input::KeyboardAndMouse::GetFocus().0 == edit.0 && edit.0 != 0;
+            let border = if focused { theme::PRIMARY } else { theme::LINE };
             let t = if focused { dpi::px(2) } else { dpi::px(1) };
             crate::ui::chrome::paint(hdc, rc, dpi::px(10), theme::SURFACE, border, t, theme::BG);
             EndPaint(hwnd, &ps);

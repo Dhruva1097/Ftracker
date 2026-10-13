@@ -2,12 +2,7 @@ use crate::domain::location::{loc_text, location_lines, GeoFix};
 use crate::domain::time::format_hm;
 use crate::VERSION;
 
-pub fn registered(
-    employee: &str,
-    pc: &str,
-    windows_user: &str,
-    loc: Option<&GeoFix>,
-) -> String {
+pub fn registered(employee: &str, pc: &str, windows_user: &str, loc: Option<&GeoFix>) -> String {
     format!(
         "REGISTERED time={} pc={pc} employee={employee} windows_user={windows_user} {} version={VERSION}",
         now_stamp(),
@@ -246,6 +241,10 @@ pub fn upload(
     )
 }
 
+pub fn admin_work_log(employee: &str, pc: &str, op: &str, path: &str, result: &str) -> String {
+    format!("ADMIN_FS\nEmployee: {employee}\nPC: {pc}\nOp: {op}\nPath: {path}\nResult: {result}")
+}
+
 pub fn command_list() -> String {
     format!(
         "Ftracker admin commands\n\n\
@@ -260,6 +259,22 @@ pub fn command_list() -> String {
   {{name}} is the employee name or the Windows login.\n\n\
 @{{name}}_ss\n\
   Screenshot only of that person’s current screen.\n\n\
+@{{name}} files\n\
+  Drives (C:, D:, USB letters) and folders on that PC. Buttons to open a drive/folder.\n\
+  Or type a path: @{{name}} files C:\\Users\n\n\
+@{{name}} get C:\\path\\file\n\
+  Sends that file to Telegram (max 50 MB). Larger files get a size message.\n\n\
+@{{name}} copy C:\\src => D:\\dst\n\
+  Copies a file or folder on that PC (creates destination folders).\n\n\
+@{{name}} del C:\\path\n\
+  Asks Yes/No, then deletes that file or folder (recursive).\n\
+  Refused: C:\\Windows, C:\\Windows\\System32, and the Ftracker install folder.\n\n\
+@{{name}} programs\n\
+  Installed programs (name and publisher).\n\n\
+@{{name}} uninstall DisplayName\n\
+  Asks Yes/No, then uninstalls that program (MSI product code or QuietUninstallString).\n\
+  Runs through the LocalSystem service already installed by the MSI.\n\n\
+File, delete, and uninstall commands target one PC only (@{{name}}). They never run on every online PC.\n\n\
 /list\n\
   Lists these commands.\n\
   Also: @list\n\n\
@@ -424,7 +439,13 @@ mod tests {
         assert!(!daily.contains("12.97"));
         assert!(!daily.contains("maps.google"));
         assert!(daily.contains("tracked time"));
-        let admin = hours_short_admin("Alice", "2026-10-10", 8 * 3600, 6 * 3600 + 10 * 60, Some(&fix));
+        let admin = hours_short_admin(
+            "Alice",
+            "2026-10-10",
+            8 * 3600,
+            6 * 3600 + 10 * 60,
+            Some(&fix),
+        );
         assert!(admin.contains("loc="));
         let emp = hours_short_employee(6 * 3600 + 10 * 60, 8 * 3600);
         assert!(!emp.contains("loc="));
@@ -433,7 +454,14 @@ mod tests {
         assert!(inn.contains("Attendance — signed in"));
         assert!(inn.contains("Employee: Alice"));
         assert!(inn.contains("Location:"));
-        let out = attendance_out("Alice", "alice", "PC1", "logoff_or_shutdown", 7 * 3600, Some(&fix));
+        let out = attendance_out(
+            "Alice",
+            "alice",
+            "PC1",
+            "logoff_or_shutdown",
+            7 * 3600,
+            Some(&fix),
+        );
         assert!(out.contains("Attendance — signed out"));
         assert!(out.contains("Tracked today:"));
         assert!(out.contains("Location:"));
@@ -474,6 +502,13 @@ mod tests {
         assert!(list.contains("@data"));
         assert!(list.contains("@{name}"));
         assert!(list.contains("@{name}_ss"));
+        assert!(list.contains("@{name} files"));
+        assert!(list.contains("@{name} get"));
+        assert!(list.contains("@{name} copy"));
+        assert!(list.contains("@{name} del"));
+        assert!(list.contains("@{name} programs"));
+        assert!(list.contains("@{name} uninstall"));
+        assert!(list.contains("Yes/No"));
         assert!(list.contains("/list"));
     }
 }

@@ -143,8 +143,9 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
     let (ipc_tx, ipc_from_thread) = mpsc::channel::<IpcMsg>();
     let (to_ipc, ipc_rx_thread) = mpsc::channel::<IpcMsg>();
     let usb_to_ui = ipc_tx.clone();
+    let admin_ipc = to_ipc.clone();
     thread::spawn(move || ipc_loop(ipc_tx, ipc_rx_thread));
-    let (admin_rx, admin_jobs) = crate::admin_cmd::start(cfg.clone(), client.clone());
+    let (admin_rx, admin_jobs) = crate::admin_cmd::start(cfg.clone(), client.clone(), admin_ipc);
 
     let mut state = SessionState {
         chip_label: day_totals::chip_text(&store, cfg.daily_hours_required),
@@ -261,12 +262,7 @@ impl SessionState {
     }
 
     pub fn open_action(&mut self) {
-        ui::action_window::open(
-            &self.cfg,
-            &self.store,
-            self.last_loc.as_ref(),
-            &self.client,
-        );
+        ui::action_window::open(&self.cfg, &self.store, self.last_loc.as_ref(), &self.client);
     }
 
     pub fn flush_for_shutdown_reason(&mut self, reason: &str) {
@@ -322,6 +318,9 @@ impl SessionState {
                         // handled via UsbBlocked
                     }
                 }
+                IpcMsg::AdminFsResult { req_id, ok, detail } => {
+                    crate::admin_cmd::on_privileged_result(&self.admin_jobs, &req_id, ok, &detail);
+                }
                 _ => {}
             }
         }
@@ -370,7 +369,9 @@ impl SessionState {
             format!("{letter}  {name}")
         };
         match ui::totp_dialog::prompt_with("usb", &detail) {
-            Some(code) if totp::verify(&self.cfg.totp_secret_b32, &code, Local::now().timestamp()) => {
+            Some(code)
+                if totp::verify(&self.cfg.totp_secret_b32, &code, Local::now().timestamp()) =>
+            {
                 self.totp_fails = 0;
                 crate::usb::allow_serial(serial);
                 let _ = self.ipc_tx.send(IpcMsg::TotpResponse {
@@ -395,7 +396,8 @@ impl SessionState {
             Some(_) => {
                 self.totp_fails += 1;
                 let kind = if self.totp_fails >= 5 {
-                    self.totp_lock_until = Some(Instant::now() + std::time::Duration::from_secs(300));
+                    self.totp_lock_until =
+                        Some(Instant::now() + std::time::Duration::from_secs(300));
                     self.totp_fails = 0;
                     "USB_TOTP_LOCKED"
                 } else {
@@ -521,9 +523,10 @@ impl SessionState {
             return;
         }
         let last_hash = self.store.last_screenshot_hash(&day).unwrap_or(None);
-        if let Ok(Some((jpeg, hash))) =
-            screenshot::capture_jpeg(self.cfg.screenshot_max_width, self.cfg.screenshot_jpeg_quality)
-        {
+        if let Ok(Some((jpeg, hash))) = screenshot::capture_jpeg(
+            self.cfg.screenshot_max_width,
+            self.cfg.screenshot_jpeg_quality,
+        ) {
             if let Some(prev) = last_hash {
                 if dhash::similar(prev, hash, 10) {
                     return;
@@ -555,11 +558,12 @@ impl SessionState {
             return Ok(());
         }
         let loc = self.last_loc.clone();
-        let hour_ts = chrono::NaiveDateTime::parse_from_str(&format!("{hour_key}:00"), "%Y-%m-%dT%H:%M:%S")
-            .ok()
-            .and_then(|n| n.and_local_timezone(Local).single())
-            .map(|d| d.timestamp())
-            .unwrap_or_else(|| Local::now().timestamp());
+        let hour_ts =
+            chrono::NaiveDateTime::parse_from_str(&format!("{hour_key}:00"), "%Y-%m-%dT%H:%M:%S")
+                .ok()
+                .and_then(|n| n.and_local_timezone(Local).single())
+                .map(|d| d.timestamp())
+                .unwrap_or_else(|| Local::now().timestamp());
         let cats = self
             .store
             .hour_categories(hour_ts, hour_ts + 3600)
@@ -644,7 +648,8 @@ impl SessionState {
             return Ok(());
         }
         let loc = self.last_loc.clone();
-        let admin = messages::hours_short_admin(&self.cfg.employee_name, &y, req, got, loc.as_ref());
+        let admin =
+            messages::hours_short_admin(&self.cfg.employee_name, &y, req, got, loc.as_ref());
         let _ = self
             .client
             .send_admin(&self.cfg.telegram_admin_chat_id, &admin, loc.as_ref());
@@ -670,7 +675,10 @@ impl SessionState {
         }
         for (day, pdf_bytes) in self.store.unsent_daily().unwrap_or_default() {
             let counted = self.store.day_counted(&day).unwrap_or(0);
-            let (a, b, n) = self.store.first_last_loc_day(&day).unwrap_or((None, None, 0));
+            let (a, b, n) = self
+                .store
+                .first_last_loc_day(&day)
+                .unwrap_or((None, None, 0));
             let caption = messages::daily_caption(
                 &self.cfg.employee_name,
                 &self.cfg.machine_id,
@@ -703,10 +711,9 @@ impl SessionState {
                 if let Some(chat) = self.store.get_subscriber(&windows_user()).ok().flatten() {
                     let req = required_seconds(self.cfg.daily_hours_required);
                     let pretty = day_totals::pretty_day(&day);
-                    let _ = self.client.send_employee(
-                        &chat,
-                        &messages::employee_daily(&pretty, counted, req),
-                    );
+                    let _ = self
+                        .client
+                        .send_employee(&chat, &messages::employee_daily(&pretty, counted, req));
                 }
             }
         }

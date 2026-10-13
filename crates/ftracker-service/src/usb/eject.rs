@@ -22,14 +22,10 @@ pub fn eject_letter(letter: &str) {
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
-    use windows::Win32::System::IO::DeviceIoControl;
     use windows::Win32::System::Ioctl::IOCTL_STORAGE_EJECT_MEDIA;
+    use windows::Win32::System::IO::DeviceIoControl;
 
-    let letter = letter
-        .chars()
-        .next()
-        .unwrap_or('E')
-        .to_ascii_uppercase();
+    let letter = letter.chars().next().unwrap_or('E').to_ascii_uppercase();
     let path: Vec<u16> = format!("\\\\.\\{letter}:\0").encode_utf16().collect();
     let shares = FILE_SHARE_READ | FILE_SHARE_WRITE;
     let accesses = [GENERIC_READ.0 | GENERIC_WRITE.0, GENERIC_READ.0];

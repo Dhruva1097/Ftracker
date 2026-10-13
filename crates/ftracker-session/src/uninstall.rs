@@ -18,7 +18,11 @@ pub fn run(otp: Option<String>) -> Result<()> {
     };
     let loc = location::current();
     let client = TelegramClient::new(cfg.telegram_bot_token.clone());
-    if !totp::verify(&cfg.totp_secret_b32, &code, chrono::Local::now().timestamp()) {
+    if !totp::verify(
+        &cfg.totp_secret_b32,
+        &code,
+        chrono::Local::now().timestamp(),
+    ) {
         let _ = client.send_admin(
             &cfg.telegram_admin_chat_id,
             &messages::uninstall_denied(&cfg.machine_id, &windows_user(), loc.as_ref()),

@@ -10,6 +10,31 @@ pub struct TgUpdate {
     pub chat_id: String,
     pub text: String,
     pub date: i64,
+    pub callback_query_id: Option<String>,
+    pub callback_data: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InlineBtn {
+    pub text: String,
+    pub data: String,
+}
+
+pub fn inline_markup(rows: &[Vec<InlineBtn>]) -> String {
+    let keyboard: Vec<Vec<serde_json::Value>> = rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|b| {
+                    serde_json::json!({
+                        "text": b.text,
+                        "callback_data": b.data,
+                    })
+                })
+                .collect()
+        })
+        .collect();
+    serde_json::json!({ "inline_keyboard": keyboard }).to_string()
 }
 
 #[derive(Clone)]
@@ -47,17 +72,40 @@ impl TelegramClient {
     }
 
     pub fn send_message(&self, chat_id: &str, text: &str) -> Result<()> {
+        self.send_message_markup(chat_id, text, None)
+    }
+
+    pub fn send_message_markup(
+        &self,
+        chat_id: &str,
+        text: &str,
+        markup: Option<&str>,
+    ) -> Result<()> {
+        let mut form: Vec<(&str, &str)> = vec![
+            ("chat_id", chat_id),
+            ("text", text),
+            ("disable_web_page_preview", "true"),
+        ];
+        if let Some(m) = markup {
+            form.push(("reply_markup", m));
+        }
         let resp = self
             .http()
             .post(self.url("sendMessage"))
-            .form(&[
-                ("chat_id", chat_id),
-                ("text", text),
-                ("disable_web_page_preview", "true"),
-            ])
+            .form(&form)
             .send()?;
         let v: Value = resp.json().unwrap_or(Value::Null);
         Self::ensure_ok(&v, "sendMessage")
+    }
+
+    pub fn answer_callback(&self, callback_query_id: &str, text: &str) -> Result<()> {
+        let resp = self
+            .http()
+            .post(self.url("answerCallbackQuery"))
+            .form(&[("callback_query_id", callback_query_id), ("text", text)])
+            .send()?;
+        let v: Value = resp.json().unwrap_or(Value::Null);
+        Self::ensure_ok(&v, "answerCallbackQuery")
     }
 
     pub fn send_location(&self, chat_id: &str, fix: &GeoFix) -> Result<()> {
@@ -78,11 +126,30 @@ impl TelegramClient {
         Self::ensure_ok(&v, "sendLocation")
     }
 
-    pub fn send_document(&self, chat_id: &str, filename: &str, bytes: &[u8], caption: &str) -> Result<()> {
-        let mime = if filename.rsplit('.').next().unwrap_or("").eq_ignore_ascii_case("pdf") {
+    pub fn send_document(
+        &self,
+        chat_id: &str,
+        filename: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Result<()> {
+        let mime = if filename
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .eq_ignore_ascii_case("pdf")
+        {
             "application/pdf"
-        } else if filename.rsplit('.').next().unwrap_or("").eq_ignore_ascii_case("jpg")
-            || filename.rsplit('.').next().unwrap_or("").eq_ignore_ascii_case("jpeg")
+        } else if filename
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .eq_ignore_ascii_case("jpg")
+            || filename
+                .rsplit('.')
+                .next()
+                .unwrap_or("")
+                .eq_ignore_ascii_case("jpeg")
         {
             "image/jpeg"
         } else {
@@ -91,7 +158,9 @@ impl TelegramClient {
         let part = multipart::Part::bytes(bytes.to_vec())
             .file_name(filename.to_string())
             .mime_str(mime)
-            .unwrap_or_else(|_| multipart::Part::bytes(bytes.to_vec()).file_name(filename.to_string()));
+            .unwrap_or_else(|_| {
+                multipart::Part::bytes(bytes.to_vec()).file_name(filename.to_string())
+            });
         let form = multipart::Form::new()
             .text("chat_id", chat_id.to_string())
             .text("caption", caption.to_string())
@@ -105,11 +174,19 @@ impl TelegramClient {
         Self::ensure_ok(&v, "sendDocument")
     }
 
-    pub fn send_photo(&self, chat_id: &str, filename: &str, bytes: &[u8], caption: &str) -> Result<()> {
+    pub fn send_photo(
+        &self,
+        chat_id: &str,
+        filename: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Result<()> {
         let part = multipart::Part::bytes(bytes.to_vec())
             .file_name(filename.to_string())
             .mime_str("image/jpeg")
-            .unwrap_or_else(|_| multipart::Part::bytes(bytes.to_vec()).file_name(filename.to_string()));
+            .unwrap_or_else(|_| {
+                multipart::Part::bytes(bytes.to_vec()).file_name(filename.to_string())
+            });
         let form = multipart::Form::new()
             .text("chat_id", chat_id.to_string())
             .text("caption", caption.to_string())
@@ -134,7 +211,7 @@ impl TelegramClient {
                 ("offset", offset_s.as_str()),
                 ("timeout", timeout_s.as_str()),
                 ("limit", "100"),
-                ("allowed_updates", r#"["message"]"#),
+                ("allowed_updates", r#"["message","callback_query"]"#),
             ])
             .send()?;
         let v: Value = resp.json().unwrap_or(Value::Null);
@@ -184,7 +261,7 @@ impl TelegramClient {
 
 fn build_http() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(25))
+        .timeout(std::time::Duration::from_secs(90))
         .pool_max_idle_per_host(2)
         .use_rustls_tls()
         .build()
@@ -206,6 +283,42 @@ pub fn parse_get_updates_result(v: &Value) -> Vec<TgUpdate> {
             Some(id) => id,
             None => continue,
         };
+        if let Some(cq) = item.get("callback_query") {
+            let callback_query_id = cq
+                .get("id")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            if callback_query_id.is_empty() {
+                continue;
+            }
+            let callback_data = cq
+                .get("data")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let msg = cq.get("message");
+            let chat_id = msg
+                .and_then(|m| m.get("chat"))
+                .and_then(|c| c.get("id"))
+                .and_then(|id| match id {
+                    Value::Number(n) => Some(n.to_string()),
+                    Value::String(s) => Some(s.clone()),
+                    _ => None,
+                });
+            let Some(chat_id) = chat_id else {
+                continue;
+            };
+            out.push(TgUpdate {
+                update_id,
+                chat_id,
+                text: String::new(),
+                date: chrono::Utc::now().timestamp(),
+                callback_query_id: Some(callback_query_id),
+                callback_data: Some(callback_data),
+            });
+            continue;
+        }
         let msg = match item.get("message") {
             Some(m) => m,
             None => continue,
@@ -226,6 +339,8 @@ pub fn parse_get_updates_result(v: &Value) -> Vec<TgUpdate> {
             chat_id,
             text,
             date,
+            callback_query_id: None,
+            callback_data: None,
         });
     }
     out
@@ -270,5 +385,28 @@ mod tests {
         assert_eq!(u[0].text, "@online");
         assert_eq!(u[1].chat_id, "-10099");
         assert_eq!(u[1].text, "@Alice");
+        assert!(u[0].callback_query_id.is_none());
+    }
+
+    #[test]
+    fn parses_callback_queries() {
+        let v = json!({
+            "ok": true,
+            "result": [
+                {
+                    "update_id": 20,
+                    "callback_query": {
+                        "id": "cb1",
+                        "data": "o:ab",
+                        "message": { "chat": { "id": 12345 }, "date": 1 }
+                    }
+                }
+            ]
+        });
+        let u = parse_get_updates_result(&v);
+        assert_eq!(u.len(), 1);
+        assert_eq!(u[0].callback_query_id.as_deref(), Some("cb1"));
+        assert_eq!(u[0].callback_data.as_deref(), Some("o:ab"));
+        assert_eq!(u[0].chat_id, "12345");
     }
 }

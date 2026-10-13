@@ -41,7 +41,10 @@ pub fn run() -> Result<()> {
 fn handle(cfg: &AppConfig, v: &Value) -> bool {
     let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("file");
     let site = v.get("site").and_then(|x| x.as_str()).unwrap_or("");
-    let browser = v.get("browser").and_then(|x| x.as_str()).unwrap_or("chrome.exe");
+    let browser = v
+        .get("browser")
+        .and_then(|x| x.as_str())
+        .unwrap_or("chrome.exe");
     let size = v.get("size").and_then(|x| x.as_u64()).unwrap_or(0);
     let size_mb = size / (1024 * 1024);
     if size_mb <= cfg.upload_max_mb {
@@ -63,7 +66,13 @@ fn handle(cfg: &AppConfig, v: &Value) -> bool {
     );
     let _ = client.send_admin(&cfg.telegram_admin_chat_id, &blocked, loc.as_ref());
     match totp_dialog::prompt("upload") {
-        Some(code) if totp::verify(&cfg.totp_secret_b32, &code, chrono::Local::now().timestamp()) => {
+        Some(code)
+            if totp::verify(
+                &cfg.totp_secret_b32,
+                &code,
+                chrono::Local::now().timestamp(),
+            ) =>
+        {
             let ok = messages::upload(
                 "UPLOAD_ALLOWED",
                 &user,

@@ -37,6 +37,18 @@ pub fn run() {
                     Ok(IpcMsg::Ping) => {
                         let _ = pipe::write_msg(&mut *guard, &IpcMsg::Pong);
                     }
+                    Ok(IpcMsg::AdminFs {
+                        op,
+                        path,
+                        dest,
+                        req_id,
+                    }) => {
+                        let (ok, detail) = crate::admin_priv::execute(&op, &path, &dest);
+                        let _ = pipe::write_msg(
+                            &mut *guard,
+                            &IpcMsg::AdminFsResult { req_id, ok, detail },
+                        );
+                    }
                     Ok(_) => {}
                     Err(_) => break,
                 }

@@ -41,7 +41,9 @@ pub fn parse(args: Vec<String>) -> Cmd {
     if native {
         Cmd::NativeHost
     } else if service || console {
-        Cmd::Service { console: console || !service }
+        Cmd::Service {
+            console: console || !service,
+        }
     } else if ensure {
         Cmd::EnsureRunning
     } else if uninstall {
@@ -63,7 +65,10 @@ mod tests {
 
     #[test]
     fn parses_flags() {
-        assert!(matches!(p(&["--enroll"]), Cmd::Enroll { preassigned: false }));
+        assert!(matches!(
+            p(&["--enroll"]),
+            Cmd::Enroll { preassigned: false }
+        ));
         assert!(matches!(
             p(&["--enroll", "--preassigned"]),
             Cmd::Enroll { preassigned: true }

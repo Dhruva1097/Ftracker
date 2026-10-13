@@ -24,7 +24,11 @@ impl Store {
             .unwrap_or((0, 0)))
     }
 
-    pub fn hour_categories(&self, hour_start_ts: i64, hour_end_ts: i64) -> Result<Vec<(String, i64)>> {
+    pub fn hour_categories(
+        &self,
+        hour_start_ts: i64,
+        hour_end_ts: i64,
+    ) -> Result<Vec<(String, i64)>> {
         let mut stmt = self.conn().prepare(
             "SELECT category, SUM(duration_s) FROM events
              WHERE ts>=?1 AND ts<?2 AND counted=1 GROUP BY category",
@@ -36,9 +40,9 @@ impl Store {
     }
 
     pub fn recent_days(&self, limit: i64) -> Result<Vec<(String, i64, i64)>> {
-        let mut stmt = self.conn().prepare(
-            "SELECT day, counted_s, idle_s FROM day_seconds ORDER BY day DESC LIMIT ?1",
-        )?;
+        let mut stmt = self
+            .conn()
+            .prepare("SELECT day, counted_s, idle_s FROM day_seconds ORDER BY day DESC LIMIT ?1")?;
         let rows = stmt.query_map([limit], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         Ok(rows.filter_map(|x| x.ok()).collect())
     }
@@ -73,16 +77,27 @@ impl Store {
             .ok();
         let n: i64 = self
             .conn()
-            .query_row(
-                "SELECT COUNT(*) FROM locations WHERE day=?1",
-                [day],
-                |r| r.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM locations WHERE day=?1", [day], |r| {
+                r.get(0)
+            })
             .unwrap_or(0);
         Ok((first, last, n))
     }
 
-    pub fn timeline_day(&self, day: &str) -> Result<Vec<(i64, String, String, String, String, Option<f64>, Option<f64>)>> {
+    pub fn timeline_day(
+        &self,
+        day: &str,
+    ) -> Result<
+        Vec<(
+            i64,
+            String,
+            String,
+            String,
+            String,
+            Option<f64>,
+            Option<f64>,
+        )>,
+    > {
         let mut stmt = self.conn().prepare(
             "SELECT ts, kind, process, title, category, lat, lon FROM events WHERE day=?1 ORDER BY ts ASC",
         )?;
@@ -100,7 +115,12 @@ impl Store {
         Ok(rows.filter_map(|x| x.ok()).collect())
     }
 
-    pub fn integrity_alert_logged(&self, file: &str, reason: &str, hour_start: &str) -> Result<bool> {
+    pub fn integrity_alert_logged(
+        &self,
+        file: &str,
+        reason: &str,
+        hour_start: &str,
+    ) -> Result<bool> {
         let n: i64 = self
             .conn()
             .query_row(

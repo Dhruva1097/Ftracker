@@ -18,10 +18,7 @@ pub fn secret_from_fingerprint(fp: &[u8]) -> String {
     h.update(b"Ftracker-TOTP-pc-v1");
     h.update(fp);
     let digest = h.finalize();
-    base32::encode(
-        base32::Alphabet::RFC4648 { padding: false },
-        &digest[..20],
-    )
+    base32::encode(base32::Alphabet::RFC4648 { padding: false }, &digest[..20])
 }
 
 fn machine_fingerprint() -> Vec<u8> {

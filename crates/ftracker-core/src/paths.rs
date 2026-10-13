@@ -141,11 +141,7 @@ pub fn apply_admin_acl(path: &Path) -> Result<()> {
     {
         let path_str = path.to_string_lossy().to_string();
         let dir = path.is_dir();
-        let sys = if dir {
-            "SYSTEM:(OI)(CI)F"
-        } else {
-            "SYSTEM:F"
-        };
+        let sys = if dir { "SYSTEM:(OI)(CI)F" } else { "SYSTEM:F" };
         let admins = if dir {
             "Administrators:(OI)(CI)F"
         } else {
@@ -179,4 +175,80 @@ pub fn apply_admin_acl(path: &Path) -> Result<()> {
 pub fn is_access_denied(err: &impl std::fmt::Display) -> bool {
     let s = err.to_string();
     s.contains("os error 5") || s.contains("Access is denied")
+}
+
+fn norm_admin_path(path: &Path) -> String {
+    let s = path.to_string_lossy().replace('/', "\\");
+    s.trim().trim_end_matches(['\\', '/']).to_ascii_lowercase()
+}
+
+/// Drive root like `C:` or `C:\` — recursive delete would wipe the volume.
+pub fn is_drive_root(path: &Path) -> bool {
+    let n = norm_admin_path(path);
+    n.len() == 2 && n.as_bytes().get(1) == Some(&b':')
+}
+
+/// Hard-refuse Telegram delete/overwrite of Windows and the Ftracker install/data dirs.
+pub fn is_protected_admin_path(path: &Path) -> bool {
+    let n = norm_admin_path(path);
+    if n.is_empty() {
+        return true;
+    }
+    let mut roots = vec![
+        r"c:\windows".to_string(),
+        r"c:\windows\system32".to_string(),
+        r"c:\winnt".to_string(),
+    ];
+    if let Ok(sr) = std::env::var("SystemRoot") {
+        let r = norm_admin_path(Path::new(&sr));
+        if !r.is_empty() {
+            roots.push(r);
+        }
+    }
+    for r in &roots {
+        if n == *r || n.starts_with(&format!("{r}\\")) {
+            return true;
+        }
+    }
+    let install = norm_admin_path(&program_files());
+    if !install.is_empty() && (n == install || n.starts_with(&format!("{install}\\"))) {
+        return true;
+    }
+    if let Some(parent) = this_exe().parent() {
+        let e = norm_admin_path(parent);
+        if !e.is_empty() && (n == e || n.starts_with(&format!("{e}\\"))) {
+            return true;
+        }
+    }
+    if let Ok(data) = program_data() {
+        let d = norm_admin_path(&data);
+        if !d.is_empty() && (n == d || n.starts_with(&format!("{d}\\"))) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod admin_path_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn refuses_windows_and_ftracker() {
+        assert!(is_protected_admin_path(Path::new(r"C:\Windows")));
+        assert!(is_protected_admin_path(Path::new(r"C:\Windows\System32")));
+        assert!(is_protected_admin_path(Path::new(
+            r"C:\Windows\System32\drivers"
+        )));
+        assert!(is_protected_admin_path(&program_files()));
+        assert!(is_protected_admin_path(
+            &program_files().join("ftracker.exe")
+        ));
+        assert!(!is_protected_admin_path(Path::new(r"C:\Users")));
+        assert!(!is_protected_admin_path(Path::new(r"C:\Temp\old")));
+        assert!(is_drive_root(Path::new(r"C:\")));
+        assert!(is_drive_root(Path::new(r"D:")));
+        assert!(!is_drive_root(Path::new(r"C:\Users")));
+    }
 }

@@ -36,7 +36,8 @@ fn hicon(n: i32) -> HICON {
             return HICON(0);
         }
         let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let hbmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &mut bits, None, 0).unwrap_or(HBITMAP(0));
+        let hbmp =
+            CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &mut bits, None, 0).unwrap_or(HBITMAP(0));
         if hbmp.0 == 0 || bits.is_null() {
             crate::ui::log("logo: color DIB failed");
             let _ = DeleteDC(hdc);

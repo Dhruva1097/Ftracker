@@ -1,6 +1,7 @@
 //! Background worker: named-pipe IPC, USB eject backup, integrity.
 //! The session exe (`ftracker.exe --service`) hosts this so there is only one binary.
 
+pub mod admin_priv;
 pub mod ipc_server;
 pub mod service;
 pub mod usb;

@@ -76,7 +76,9 @@ fn get_text(hwnd: windows::Win32::Foundation::HWND) -> String {
     if n <= 0 {
         return String::new();
     }
-    String::from_utf16_lossy(&buf[..n as usize]).trim().to_string()
+    String::from_utf16_lossy(&buf[..n as usize])
+        .trim()
+        .to_string()
 }
 
 #[cfg(windows)]
@@ -133,15 +135,19 @@ pub fn open(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &Teleg
 fn run(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &TelegramClient) {
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{HWND, RECT};
-    use windows::Win32::Graphics::Gdi::{CreateFontW, CreateSolidBrush, DeleteObject, HGDIOBJ, HFONT};
+    use windows::Win32::Graphics::Gdi::{
+        CreateFontW, CreateSolidBrush, DeleteObject, HFONT, HGDIOBJ,
+    };
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::UI::Controls::{InitCommonControlsEx, ICC_WIN95_CLASSES, INITCOMMONCONTROLSEX};
+    use windows::Win32::UI::Controls::{
+        InitCommonControlsEx, ICC_WIN95_CLASSES, INITCOMMONCONTROLSEX,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
         AdjustWindowRect, CreateWindowExW, DispatchMessageW, GetMessageW, GetSystemMetrics,
         IsDialogMessageW, LoadCursorW, RegisterClassW, SendMessageW, ShowWindow, TranslateMessage,
         CS_HREDRAW, CS_VREDRAW, IDC_ARROW, MSG, SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, WINDOW_STYLE,
-        WM_SETFONT, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPED, WS_SYSMENU,
-        WS_TABSTOP, WS_VISIBLE, WS_EX_APPWINDOW, WS_EX_CONTROLPARENT,
+        WM_SETFONT, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_APPWINDOW,
+        WS_EX_CONTROLPARENT, WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
     };
 
     let _ = unsafe {
@@ -280,11 +286,96 @@ fn run(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &TelegramCl
     let how_lines = how_txt.lines().count().max(1) as i32;
     let how_h = how_lines * LINE + 4;
 
-    let font = unsafe { CreateFontW(-dpi::px(16), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_title = unsafe { CreateFontW(-dpi::px(22), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_num = unsafe { CreateFontW(-dpi::px(20), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_small = unsafe { CreateFontW(-dpi::px(13), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
-    let font_btn = unsafe { CreateFontW(-dpi::px(15), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
+    let font = unsafe {
+        CreateFontW(
+            -dpi::px(16),
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_title = unsafe {
+        CreateFontW(
+            -dpi::px(22),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_num = unsafe {
+        CreateFontW(
+            -dpi::px(20),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_small = unsafe {
+        CreateFontW(
+            -dpi::px(13),
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
+    let font_btn = unsafe {
+        CreateFontW(
+            -dpi::px(15),
+            0,
+            0,
+            0,
+            600,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            w!("Segoe UI"),
+        )
+    };
 
     let mut state = ActionState {
         cfg,
@@ -333,15 +424,45 @@ fn run(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &TelegramCl
         y += p(26);
         let today_h = stat(&today_txt, x, y, cw, p(24), hwnd, IDC_TODAY, inst_h, wrap);
         y += p(24);
-        let remain_h = stat(&remain_txt, x, y, cw, p(LINE), hwnd, IDC_REMAIN, inst_h, wrap);
+        let remain_h = stat(
+            &remain_txt,
+            x,
+            y,
+            cw,
+            p(LINE),
+            hwnd,
+            IDC_REMAIN,
+            inst_h,
+            wrap,
+        );
         y += p(LINE + 10);
         label("Recent days", x, y, hwnd, inst_h);
         y += p(LINE);
-        let recent_ctl = stat(&recent, x, y, cw, p(recent_h), hwnd, IDC_RECENT, inst_h, wrap);
+        let recent_ctl = stat(
+            &recent,
+            x,
+            y,
+            cw,
+            p(recent_h),
+            hwnd,
+            IDC_RECENT,
+            inst_h,
+            wrap,
+        );
         y += p(recent_h + 14);
         label("Daily Telegram updates", x, y, hwnd, inst_h);
         y += p(LINE);
-        let sub_h = stat(&sub_txt, x, y, cw, p(LINE), hwnd, IDC_SUBSTATUS, inst_h, wrap);
+        let sub_h = stat(
+            &sub_txt,
+            x,
+            y,
+            cw,
+            p(LINE),
+            hwnd,
+            IDC_SUBSTATUS,
+            inst_h,
+            wrap,
+        );
         y += p(LINE + 4);
         let q_h = stat(question, x, y, cw, p(22), hwnd, IDC_Q, inst_h, wrap);
         y += p(22 + 8);
@@ -470,9 +591,9 @@ fn client_h(hwnd: windows::Win32::Foundation::HWND) -> i32 {
 fn fit_window(hwnd: windows::Win32::Foundation::HWND, content_h: i32) {
     use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{
-        AdjustWindowRect, GetWindowLongW, GetWindowRect, SetWindowPos, GWL_STYLE,
-        SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW, HWND_TOP,
-        SWP_NOACTIVATE, SWP_NOZORDER,
+        AdjustWindowRect, GetWindowLongW, GetWindowRect, SetWindowPos, SystemParametersInfoW,
+        GWL_STYLE, HWND_TOP, SPI_GETWORKAREA, SWP_NOACTIVATE, SWP_NOZORDER,
+        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
     };
     let mut wa = RECT::default();
     unsafe {
@@ -492,7 +613,13 @@ fn fit_window(hwnd: windows::Win32::Foundation::HWND, content_h: i32) {
         right: dpi::px(WIN_W),
         bottom: client,
     };
-    let _ = unsafe { AdjustWindowRect(&mut rc, windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(style), false) };
+    let _ = unsafe {
+        AdjustWindowRect(
+            &mut rc,
+            windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(style),
+            false,
+        )
+    };
     let ww = rc.right - rc.left;
     let hh = rc.bottom - rc.top;
     let mut wr = RECT::default();
@@ -567,7 +694,10 @@ fn scroll_by(hwnd: windows::Win32::Foundation::HWND, state: &mut ActionState, dy
 }
 
 #[cfg(windows)]
-fn apply_label_fonts(parent: windows::Win32::Foundation::HWND, font: windows::Win32::Graphics::Gdi::HFONT) {
+fn apply_label_fonts(
+    parent: windows::Win32::Foundation::HWND,
+    font: windows::Win32::Graphics::Gdi::HFONT,
+) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, SendMessageW, WM_SETFONT};
     let mut child = HWND(0);
@@ -772,23 +902,11 @@ unsafe extern "system" fn field_proc(
             let mut rc = RECT::default();
             let _ = GetClientRect(hwnd, &mut rc);
             let edit = windows::Win32::Foundation::HWND(get_user_data(hwnd));
-            let focused = windows::Win32::UI::Input::KeyboardAndMouse::GetFocus().0 == edit.0
-                && edit.0 != 0;
-            let border = if focused {
-                theme::PRIMARY
-            } else {
-                theme::LINE
-            };
+            let focused =
+                windows::Win32::UI::Input::KeyboardAndMouse::GetFocus().0 == edit.0 && edit.0 != 0;
+            let border = if focused { theme::PRIMARY } else { theme::LINE };
             let t = if focused { dpi::px(2) } else { dpi::px(1) };
-            crate::ui::chrome::paint(
-                hdc,
-                rc,
-                dpi::px(10),
-                theme::SURFACE,
-                border,
-                t,
-                theme::BG,
-            );
+            crate::ui::chrome::paint(hdc, rc, dpi::px(10), theme::SURFACE, border, t, theme::BG);
             EndPaint(hwnd, &ps);
             LRESULT(0)
         }
