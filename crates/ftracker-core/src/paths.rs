@@ -215,9 +215,12 @@ pub fn is_protected_admin_path(path: &Path) -> bool {
         return true;
     }
     if let Some(parent) = this_exe().parent() {
-        let e = norm_admin_path(parent);
-        if !e.is_empty() && (n == e || n.starts_with(&format!("{e}\\"))) {
-            return true;
+        // Exe at `C:\ftracker.exe` must not mark the whole C: drive protected.
+        if !is_drive_root(parent) {
+            let e = norm_admin_path(parent);
+            if !e.is_empty() && (n == e || n.starts_with(&format!("{e}\\"))) {
+                return true;
+            }
         }
     }
     if let Ok(data) = program_data() {

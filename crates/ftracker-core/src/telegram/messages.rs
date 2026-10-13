@@ -260,19 +260,22 @@ pub fn command_list() -> String {
 @{{name}}_ss\n\
   Screenshot only of that person’s current screen.\n\n\
 @{{name}} files\n\
-  Drives (C:, D:, USB letters) and folders on that PC. Buttons to open a drive/folder.\n\
-  Or type a path: @{{name}} files C:\\Users\n\n\
+  Drives as buttons. Tap a drive or folder to open it. Tap a file for Get / Delete.\n\
+  Next / Prev when the list is long. Yes/No before any delete.\n\
+  You can still type a path: @{{name}} files C:\\Users\n\n\
 @{{name}} get C:\\path\\file\n\
-  Sends that file to Telegram (max 50 MB). Larger files get a size message.\n\n\
+  Sends that file to Telegram (max 50 MB). Larger files get a size message.\n\
+  Prefer tapping the file in @{{name}} files to avoid typing mistakes.\n\n\
 @{{name}} copy C:\\src => D:\\dst\n\
   Copies a file or folder on that PC (creates destination folders).\n\n\
 @{{name}} del C:\\path\n\
   Asks Yes/No, then deletes that file or folder (recursive).\n\
-  Refused: C:\\Windows, C:\\Windows\\System32, and the Ftracker install folder.\n\n\
+  Prefer tapping Delete on a listing. Refused: C:\\Windows and the Ftracker folder.\n\n\
 @{{name}} programs\n\
-  Installed programs (name and publisher).\n\n\
+  Installed programs as buttons (name + publisher). Tap a name, then Yes/No to uninstall.\n\
+  Next / Prev for more pages.\n\n\
 @{{name}} uninstall DisplayName\n\
-  Asks Yes/No, then uninstalls that program (MSI product code or QuietUninstallString).\n\
+  Asks Yes/No, then uninstalls (prefer tapping the name in @{{name}} programs).\n\
   Runs through the LocalSystem service already installed by the MSI.\n\n\
 File, delete, and uninstall commands target one PC only (@{{name}}). They never run on every online PC.\n\n\
 /list\n\

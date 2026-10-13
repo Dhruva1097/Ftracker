@@ -43,7 +43,14 @@ pub fn run() {
                         dest,
                         req_id,
                     }) => {
+                        // Do not hold the pipe lock during delete/uninstall — USB TOTP
+                        // and Ping share this mutex.
+                        drop(guard);
                         let (ok, detail) = crate::admin_priv::execute(&op, &path, &dest);
+                        let mut guard = match shared.lock() {
+                            Ok(g) => g,
+                            Err(_) => break,
+                        };
                         let _ = pipe::write_msg(
                             &mut *guard,
                             &IpcMsg::AdminFsResult { req_id, ok, detail },

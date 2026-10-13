@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use ftracker_core::paths;
 
 pub const TG_MAX_DOC: u64 = 50 * 1024 * 1024;
-const LIST_CAP: usize = 80;
+const LIST_CAP: usize = 240;
 
 #[derive(Debug, Clone)]
 pub struct DirListing {
@@ -119,6 +119,7 @@ pub fn list_dir(path: &Path) -> Result<DirListing> {
     })
 }
 
+#[allow(dead_code)]
 pub fn format_drives(drives: &[PathBuf]) -> String {
     if drives.is_empty() {
         return "Drives: (none)".into();
@@ -130,6 +131,7 @@ pub fn format_drives(drives: &[PathBuf]) -> String {
     s
 }
 
+#[allow(dead_code)]
 pub fn format_listing(list: &DirListing) -> String {
     let mut s = format!("Path: {}\n", list.path);
     if let Some(p) = &list.parent {
@@ -237,6 +239,7 @@ fn dir_size(path: &Path) -> io::Result<u64> {
     Ok(n)
 }
 
+#[allow(dead_code)]
 pub fn format_programs(rows: &[InstalledProgram]) -> String {
     let mut s = String::from("Installed programs\n\n");
     for p in rows.iter().take(LIST_CAP) {
@@ -256,16 +259,41 @@ pub fn format_programs(rows: &[InstalledProgram]) -> String {
     s
 }
 
-pub fn find_program(display: &str) -> Option<InstalledProgram> {
-    let want = display.trim().to_ascii_lowercase();
+pub fn normalize_admin_path(s: &str) -> PathBuf {
+    let t = s.trim();
+    let b = t.as_bytes();
+    if b.len() == 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+        return PathBuf::from(format!("{}:\\", b[0] as char));
+    }
+    PathBuf::from(t)
+}
+
+pub fn find_program(display: &str) -> Result<InstalledProgram, &'static str> {
     let rows = list_programs();
-    rows.iter()
-        .find(|p| p.name.to_ascii_lowercase() == want)
-        .cloned()
-        .or_else(|| {
-            rows.into_iter()
-                .find(|p| p.name.to_ascii_lowercase().contains(&want))
-        })
+    pick_program(display, &rows).cloned()
+}
+
+fn pick_program<'a>(
+    display: &str,
+    rows: &'a [InstalledProgram],
+) -> Result<&'a InstalledProgram, &'static str> {
+    let want_trim = display.trim();
+    if want_trim.is_empty() {
+        return Err("program not found");
+    }
+    if let Some(p) = rows.iter().find(|p| p.name.eq_ignore_ascii_case(want_trim)) {
+        return Ok(p);
+    }
+    let low = want_trim.to_ascii_lowercase();
+    let hits: Vec<_> = rows
+        .iter()
+        .filter(|p| p.name.to_ascii_lowercase().contains(&low))
+        .collect();
+    match hits.len() {
+        1 => Ok(hits[0]),
+        0 => Err("program not found"),
+        _ => Err("several matches — tap a name in programs"),
+    }
 }
 
 pub fn list_programs() -> Vec<InstalledProgram> {
@@ -446,5 +474,37 @@ mod tests {
         assert!(is_ftracker_program("Ftracker"));
         assert!(is_ftracker_program("Ftracker 1.0"));
         assert!(!is_ftracker_program("Google Chrome"));
+    }
+
+    fn prog(name: &str) -> InstalledProgram {
+        InstalledProgram {
+            name: name.into(),
+            publisher: String::new(),
+            uninstall: String::new(),
+            quiet: String::new(),
+            product_code: String::new(),
+        }
+    }
+
+    #[test]
+    fn program_match_exact_or_unique() {
+        let rows = vec![
+            prog("Google Chrome"),
+            prog("Google Drive"),
+            prog("Notepad++"),
+        ];
+        assert_eq!(
+            pick_program("Google Chrome", &rows).unwrap().name,
+            "Google Chrome"
+        );
+        assert_eq!(pick_program("notepad++", &rows).unwrap().name, "Notepad++");
+        assert_eq!(pick_program("Notepad", &rows).unwrap().name, "Notepad++");
+        assert!(pick_program("Google", &rows).is_err());
+        assert!(pick_program("Firefox", &rows).is_err());
+        assert_eq!(normalize_admin_path("C:"), PathBuf::from(r"C:\"));
+        assert_eq!(
+            normalize_admin_path(r"C:\Users"),
+            PathBuf::from(r"C:\Users")
+        );
     }
 }

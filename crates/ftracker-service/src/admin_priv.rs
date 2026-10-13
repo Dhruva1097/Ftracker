@@ -4,6 +4,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use ftracker_core::paths;
 
@@ -146,8 +148,9 @@ fn uninstall(display: &str) -> (bool, String) {
             "refused: Ftracker cannot be uninstalled this way".into(),
         );
     }
-    let Some(prog) = find_program(display) else {
-        return (false, format!("program not found: {display}"));
+    let prog = match find_program(display) {
+        Ok(p) => p,
+        Err(e) => return (false, e),
     };
     if is_ftracker_program(&prog.name)
         || prog.uninstall.to_ascii_lowercase().contains("ftracker")
@@ -184,16 +187,25 @@ struct Prog {
     product_code: String,
 }
 
-fn find_program(display: &str) -> Option<Prog> {
-    let want = display.trim().to_ascii_lowercase();
+fn find_program(display: &str) -> Result<Prog, String> {
+    let want_trim = display.trim();
+    if want_trim.is_empty() {
+        return Err("program not found".into());
+    }
     let all = list_programs();
-    all.iter()
-        .find(|p| p.name.to_ascii_lowercase() == want)
-        .cloned()
-        .or_else(|| {
-            all.into_iter()
-                .find(|p| p.name.to_ascii_lowercase().contains(&want))
-        })
+    if let Some(p) = all.iter().find(|p| p.name.eq_ignore_ascii_case(want_trim)) {
+        return Ok(p.clone());
+    }
+    let low = want_trim.to_ascii_lowercase();
+    let hits: Vec<_> = all
+        .into_iter()
+        .filter(|p| p.name.to_ascii_lowercase().contains(&low))
+        .collect();
+    match hits.len() {
+        1 => Ok(hits.into_iter().next().unwrap()),
+        0 => Err(format!("program not found: {want_trim}")),
+        n => Err(format!("several matches ({n}) — tap a name in programs")),
+    }
 }
 
 fn list_programs() -> Vec<Prog> {
@@ -379,12 +391,20 @@ fn run_hidden(cmdline: &str) -> Result<i32, String> {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        let status = Command::new("cmd")
+        let mut child = Command::new("cmd")
             .args(["/C", cmdline])
             .creation_flags(CREATE_NO_WINDOW)
-            .status()
+            .spawn()
             .map_err(|e| format!("spawn: {e}"))?;
-        Ok(status.code().unwrap_or(-1))
+        for _ in 0..120 {
+            match child.try_wait() {
+                Ok(Some(st)) => return Ok(st.code().unwrap_or(-1)),
+                Ok(None) => thread::sleep(Duration::from_secs(1)),
+                Err(e) => return Err(format!("wait: {e}")),
+            }
+        }
+        let _ = child.kill();
+        Err("uninstall timed out (120s)".into())
     }
     #[cfg(not(windows))]
     {
