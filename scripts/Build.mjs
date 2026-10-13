@@ -14,6 +14,10 @@ export class Build {
   }
 
   async prompt(question) {
+    if (!process.stdin.isTTY) {
+      console.log(`${question}(no TTY — using default)`);
+      return "";
+    }
     if (!this.rl) this.rl = createInterface({ input, output });
     const answer = await this.rl.question(question);
     return answer.trim();
@@ -236,6 +240,7 @@ export class Build {
       console.log("Installer mode:");
       console.log("  1. interactive  (employee fills name, hours, and TOTP on the PC)");
       console.log("  2. preassigned  (you fill those now, then the PC only confirms TOTP)");
+      console.log("Type 1 or 2, then press Enter. Waiting...");
       const mode = (await this.prompt("Choice [1]: ")).trim().toLowerCase();
       const preassigned = mode === "2" || mode === "preassigned" || mode === "pre-assigned" || mode === "p";
       if (preassigned) {

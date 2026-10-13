@@ -22,29 +22,22 @@ pub fn check_service_integrity(
         }
     };
     if let Some(find) = integrity::check_peer(&path, &cfg.service_sha256, "ftracker.exe") {
-        let hour = ftracker_core::report::day_totals::current_hour_start();
-        let already = store
-            .and_then(|s| {
-                s.integrity_alert_logged(&find.file, &find.reason, &hour)
-                    .ok()
-            })
-            .unwrap_or(false);
-        if !already {
-            let text = messages::integrity_fail(
-                &cfg.employee_name,
-                &cfg.machine_id,
-                &find.file,
-                &find.reason,
-                &find.expected,
-                &find.got,
-                loc,
-            );
-            let _ = client.send_admin(&cfg.telegram_admin_chat_id, &text, loc);
-            if let Some(s) = store {
-                let _ = s.log_integrity_alert(&find.file, &find.reason, &hour);
-                let _ = s.persist();
-            }
+        if !integrity::should_send_alert(&find) {
+            return;
         }
+        let text = messages::integrity_fail(
+            &cfg.employee_name,
+            &cfg.machine_id,
+            &find.file,
+            &find.reason,
+            &find.expected,
+            &find.got,
+            loc,
+        );
+        let _ = client.send_admin(&cfg.telegram_admin_chat_id, &text, loc);
+        let _ = store; // kept so callers still pass Store
+    } else {
+        integrity::clear_alert_latch();
     }
 }
 

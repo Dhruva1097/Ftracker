@@ -1,0 +1,74 @@
+{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Tahoma;}}
+\viewkind4\uc1\pard\f0\fs18
+\b Ftracker work-tracking terms\b0\par
+\par
+Please scroll and read all of this before you click Accept. Accept installs Ftracker on this PC and means you agree to these terms. Cancel stops the install and leaves this PC unchanged.\par
+\par
+Ftracker is workplace time tracking for your employer. Data is sent to the employer/admin on Telegram. It is not sent back to you as the employee.\par
+\par
+\b 1. Time and activity\b0\par
+Ftracker records when this PC is in use.\par
+- Keyboard and mouse idle: after about 5 minutes with no input, time is marked idle and is not counted toward required hours.\par
+- Foreground program name and window title are recorded (a browser title may include the site or document name shown in the title bar).\par
+- Time is grouped as Browser, IDE, Office, or Other.\par
+- A daily hours quota is set at enrollment (default 8 hours on workdays).\par
+- The admin is notified when you sign in, sign out, or Ftracker restarts after a stop.\par
+\par
+\b 2. Screen samples\b0\par
+While you are active, Ftracker takes compressed pictures of the work screen.\par
+- About every 10 minutes, at most 24 pictures per day.\par
+- JPEG, resized to at most 1280 pixels wide.\par
+- Idle screens and lock/screensaver screens are not captured.\par
+- Pictures are stored on this PC and included in the daily PDF sent to the admin.\par
+- The admin can also request a live screenshot of the current screen.\par
+- You do not receive these pictures.\par
+\par
+\b 3. Location\b0\par
+Ftracker uses Windows Location (GPS, Wi-Fi, or whatever Windows provides).\par
+- Position is refreshed about every 2 minutes while Ftracker is running.\par
+- Coordinates and accuracy are stored and sent with admin messages and reports.\par
+- Windows may show its own location permission prompt. That prompt is separate from this screen.\par
+\par
+\b 4. Removable storage\b0\par
+USB flash drives, SD cards, and similar removable disks are blocked and ejected until an admin authenticator (TOTP) code is entered on this PC.\par
+- The admin is told when a device is blocked, allowed, denied, locked out after failed codes, or times out.\par
+- Ftracker does not wipe those drives by itself; it refuses them until the admin code is given.\par
+\par
+\b 5. Large browser uploads\b0\par
+A Chrome and Edge extension is installed. It watches file uploads on web pages.\par
+- Uploads larger than 100 MB are cancelled until an admin authenticator code is entered.\par
+- The file on disk is not deleted. Smaller uploads are not blocked by this rule.\par
+\par
+\b 6. Reports the admin receives\b0\par
+- A daily PDF around 18:00 local time: counted hours vs required hours, idle excluded, app categories, locations, screen samples, and a work timeline.\par
+- Shorter summaries about once an hour.\par
+- On admin request: a PDF of the last 30 days of hours; a live snapshot (screenshot, location, open apps, USB, CPU, RAM, disk, tracked time today).\par
+- Alerts if the work log or secrets file is corrupt, or if Ftracker files were replaced (integrity).\par
+\par
+\b 7. Admin file and program actions\b0\par
+The admin, addressing this employee/PC by name, may:\par
+- Browse drives and folders on this PC.\par
+- Download a file to Telegram (maximum 50 MB).\par
+- Copy a file or folder to another path on this PC.\par
+- Delete a file or folder after a Yes/No confirm. C:\\Windows and the Ftracker folders are refused.\par
+- List installed programs and uninstall one after a Yes/No confirm.\par
+Those actions run only on the named PC. They do not run on every online PC at once.\par
+\par
+\b 8. How Ftracker stays running\b0\par
+- Starts at Windows logon (startup entry and a logon task) and shows a tray icon while you are signed in.\par
+- A Windows service (FtrackerSvc) runs in the background for USB handling and file-integrity checks.\par
+- Removing Ftracker requires the admin authenticator code (from ftracker.exe --uninstall), not only Apps and Features.\par
+\par
+\b 9. Data stored on this PC\b0\par
+Work logs, screen samples, and settings are stored under ProgramData\\Ftracker.\par
+- Secrets (including the on-device TOTP secret for Google Authenticator) are protected with Windows DPAPI. They are not shown in this installer.\par
+- The local database is trimmed if it grows large (about 200 MB).\par
+- Ordinary user documents are not mass-deleted by tracking. A specific file is deleted only if the admin confirms that action in section 7.\par
+\par
+\b 10. What Ftracker does not do\b0\par
+Ftracker does not log keystrokes, does not capture the clipboard, does not hide from Task Manager, and does not capture idle or lock screens.\par
+\par
+\b 11. Your choice\b0\par
+Accept = you understand the terms above and consent to this monitoring on this PC for employment time tracking.\par
+Cancel = do not install Ftracker.\par
+}

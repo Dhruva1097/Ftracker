@@ -7,20 +7,31 @@
       <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
       <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
       <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
-      <Dialog Id="ConsentDlg" Width="370" Height="270" Title="Ftracker consent">
-        <Control Id="Title" Type="Text" X="15" Y="10" Width="340" Height="30" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Work tracking consent" />
-        <Control Id="Body" Type="ScrollableText" X="15" Y="45" Width="340" Height="160" Sunken="yes">
-          <Text>This PC records active time, app titles, and location; blocks USB storage; cancels Chrome/Edge uploads over 100MB until an admin authenticator code; autostarts; sends a daily PDF work report. Local files are not deleted. The work screen is sampled while you are active (compressed pictures go only to the admin PDF, not to the employee). Idle and lock screens are not captured.</Text>
+      <Dialog Id="ConsentDlg" Width="480" Height="340" Title="Ftracker consent">
+        <Control Id="Title" Type="Text" X="15" Y="10" Width="450" Height="24" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Work tracking terms - scroll and read all" />
+        <Control Id="Body" Type="ScrollableText" X="15" Y="36" Width="450" Height="268" Sunken="yes" TabSkip="no">
+          <Text SourceFile="$(sys.SOURCEFILEDIR)consent.rtf" />
         </Control>
-        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Accept">
+        <Control Id="Next" Type="PushButton" X="348" Y="313" Width="56" Height="17" Default="yes" Text="&amp;Accept">
           <Publish Event="EndDialog" Value="Return">1</Publish>
         </Control>
-        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+        <Control Id="Cancel" Type="PushButton" X="408" Y="313" Width="56" Height="17" Cancel="yes" Text="Cancel">
           <Publish Event="EndDialog" Value="Exit">1</Publish>
+        </Control>
+      </Dialog>
+      <Dialog Id="ProgressDlg" Width="370" Height="270" Title="Ftracker Setup" Modeless="yes">
+        <Control Id="Title" Type="Text" X="15" Y="15" Width="340" Height="30" Transparent="yes" NoPrefix="yes" TabSkip="no" Text="{\WixUI_Font_Title}Installing Ftracker" />
+        <Control Id="Text" Type="Text" X="20" Y="60" Width="330" Height="30" Transparent="yes" NoPrefix="yes" Text="Please wait. Do not cancel." />
+        <Control Id="Status" Type="Text" X="20" Y="100" Width="330" Height="20" Transparent="yes" NoPrefix="yes">
+          <Subscribe Event="ActionText" Attribute="Text" />
+        </Control>
+        <Control Id="ProgressBar" Type="ProgressBar" X="20" Y="140" Width="330" Height="16" ProgressBlocks="yes">
+          <Subscribe Event="SetProgress" Attribute="Progress" />
         </Control>
       </Dialog>
       <InstallUISequence>
         <Show Dialog="ConsentDlg" After="CostFinalize">NOT Installed AND NOT PREASSIGNED</Show>
+        <Show Dialog="ProgressDlg" Before="ExecuteAction" />
         <ExecuteAction Sequence="1300" />
       </InstallUISequence>
       <AdminUISequence>

@@ -106,6 +106,40 @@ pub struct IntegrityFinding {
     pub got: String,
 }
 
+/// MSI writes `rehash.flag` beside the exe. Refresh stored hashes so an
+/// intended upgrade is not reported as tampering.
+pub fn refresh_hashes_if_msi_replaced(cfg: &mut crate::config::AppConfig) {
+    let flag = crate::paths::sibling("rehash.flag");
+    if !flag.exists() {
+        return;
+    }
+    let this = crate::paths::this_exe();
+    let session = if this
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .eq_ignore_ascii_case("ftracker.exe")
+    {
+        this
+    } else {
+        crate::paths::session_exe()
+    };
+    let service = crate::paths::sibling("ftracker-svc.exe");
+    let a = sha256_file(&session).unwrap_or_default();
+    let b = if service.exists() {
+        sha256_file(&service).unwrap_or_default()
+    } else {
+        a.clone()
+    };
+    if a.is_empty() {
+        return;
+    }
+    cfg.session_sha256 = a;
+    cfg.service_sha256 = b;
+    let _ = cfg.save();
+    let _ = std::fs::remove_file(&flag);
+}
+
 /// Cross-check the peer exe against the hash stored at enroll.
 pub fn check_peer(path: &Path, expected_sha: &str, file_label: &str) -> Option<IntegrityFinding> {
     if expected_sha.is_empty() {
@@ -138,5 +172,39 @@ pub fn check_peer(path: &Path, expected_sha: &str, file_label: &str) -> Option<I
             expected: expected_sha.into(),
             got: String::new(),
         }),
+    }
+}
+
+fn alert_latch_path() -> Option<std::path::PathBuf> {
+    crate::paths::program_data()
+        .ok()
+        .map(|d| d.join("integrity-sent.txt"))
+}
+
+fn finding_key(find: &IntegrityFinding) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        find.file, find.reason, find.expected, find.got
+    )
+}
+
+/// Telegram: one message per distinct mismatch. Not every minute.
+pub fn should_send_alert(find: &IntegrityFinding) -> bool {
+    let key = finding_key(find);
+    let Some(path) = alert_latch_path() else {
+        return true;
+    };
+    if let Ok(prev) = std::fs::read_to_string(&path) {
+        if prev.trim() == key {
+            return false;
+        }
+    }
+    let _ = std::fs::write(&path, &key);
+    true
+}
+
+pub fn clear_alert_latch() {
+    if let Some(path) = alert_latch_path() {
+        let _ = std::fs::remove_file(path);
     }
 }

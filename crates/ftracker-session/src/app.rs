@@ -58,7 +58,7 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
         }
         return Ok(());
     }
-    let cfg = match AppConfig::load() {
+    let mut cfg = match AppConfig::load() {
         Ok(c) if c.is_registered() => c,
         other => {
             let corrupt = match &other {
@@ -95,6 +95,7 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
         }
     };
     ui::log("registered — starting session");
+    ftracker_core::integrity::refresh_hashes_if_msi_replaced(&mut cfg);
     crate::permissions::ensure_at_start();
     let store = match Store::open(&cfg) {
         Ok(s) => s,

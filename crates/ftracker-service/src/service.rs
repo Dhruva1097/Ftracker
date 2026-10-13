@@ -35,13 +35,12 @@ pub fn run_as_service() -> Result<()> {
         controls_accepted: ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN,
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
-        wait_hint: Duration::from_millis(0),
+        wait_hint: Duration::from_secs(5),
         process_id: None,
     })?;
-    let worker = thread::spawn(run_worker);
+    let _worker = thread::spawn(run_worker);
     let _ = rx.recv();
-    let _ = worker;
-    status.set_service_status(ServiceStatus {
+    let _ = status.set_service_status(ServiceStatus {
         service_type: ServiceType::OWN_PROCESS,
         current_state: ServiceState::Stopped,
         controls_accepted: ServiceControlAccept::empty(),
@@ -49,8 +48,10 @@ pub fn run_as_service() -> Result<()> {
         checkpoint: 0,
         wait_hint: Duration::from_millis(0),
         process_id: None,
-    })?;
-    Ok(())
+    });
+    // Worker threads (IPC/USB) would otherwise keep this process alive and
+    // lock ftracker.exe so Windows Installer hangs on "Preparing to install".
+    std::process::exit(0);
 }
 
 pub fn run_worker() {
@@ -186,7 +187,7 @@ fn integrity_loop_start() {
 }
 
 fn check_session_integrity() {
-    let cfg = match AppConfig::load() {
+    let mut cfg = match AppConfig::load() {
         Ok(c) => c,
         Err(e) => {
             let msg = format!("{e:#}");
@@ -203,8 +204,12 @@ fn check_session_integrity() {
             return;
         }
     };
+    integrity::refresh_hashes_if_msi_replaced(&mut cfg);
     let path = paths::sibling("ftracker.exe");
     if let Some(find) = integrity::check_peer(&path, &cfg.session_sha256, "ftracker.exe") {
+        if !integrity::should_send_alert(&find) {
+            return;
+        }
         let client = TelegramClient::new(cfg.telegram_bot_token.clone());
         let text = messages::integrity_fail(
             &cfg.employee_name,
@@ -216,6 +221,8 @@ fn check_session_integrity() {
             None,
         );
         let _ = client.send_admin(&cfg.telegram_admin_chat_id, &text, None);
+    } else {
+        integrity::clear_alert_latch();
     }
 }
 
