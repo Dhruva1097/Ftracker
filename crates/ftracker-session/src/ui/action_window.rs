@@ -22,18 +22,19 @@ const IDC_CHAT: i32 = 2010;
 const IDC_HOWTO: i32 = 2011;
 const IDC_ERR: i32 = 2012;
 
-const WIN_W: i32 = 540;
-const WIN_H: i32 = 620;
+const WIN_W: i32 = 520;
+const PAD: i32 = 24;
+const LINE: i32 = 18;
 
 static OPEN: AtomicBool = AtomicBool::new(false);
 
-const HOWTO: &str = "Your chat id is a number Telegram gives you (example: 123456789).\n\n\
-How to get it:\n\
-1. Open Telegram on your phone or PC.\n\
-2. In Search, type @userinfobot and open it.\n\
-3. Tap Start. It replies with your Id number.\n\
-4. Copy that number and paste it in the box above.\n\
-5. Also open the Ftracker bot and tap Start so it can message you.";
+const HOWTO: &str = "Your chat id is a number (example: 123456789).\n\
+1. Open Telegram → search @userinfobot → Start\n\
+2. Copy the Id it shows and paste it above\n\
+3. Open the Ftracker bot and tap Start so it can message you";
+
+const HOWTO_CHANGE: &str = "Leave the box empty to keep your current chat.\n\
+To change it: @userinfobot → Start → paste the new Id → Yes";
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -105,6 +106,8 @@ struct ActionState<'a> {
     finished: bool,
     yes_label: String,
     no_label: String,
+    scroll: i32,
+    content_h: i32,
 }
 
 fn valid_chat_id(s: &str) -> bool {
@@ -137,8 +140,8 @@ fn run(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &TelegramCl
         AdjustWindowRect, CreateWindowExW, DispatchMessageW, GetMessageW, GetSystemMetrics,
         IsDialogMessageW, LoadCursorW, RegisterClassW, SendMessageW, ShowWindow, TranslateMessage,
         CS_HREDRAW, CS_VREDRAW, IDC_ARROW, MSG, SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, WINDOW_STYLE,
-        WM_SETFONT, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN,
-        WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_EX_APPWINDOW, WS_EX_CONTROLPARENT,
+        WM_SETFONT, WNDCLASSW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPED, WS_SYSMENU,
+        WS_TABSTOP, WS_VISIBLE, WS_EX_APPWINDOW, WS_EX_CONTROLPARENT,
     };
 
     let _ = unsafe {
@@ -188,7 +191,7 @@ fn run(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &TelegramCl
         left: 0,
         top: 0,
         right: dpi::px(WIN_W),
-        bottom: dpi::px(WIN_H),
+        bottom: dpi::px(520),
     };
     let _ = unsafe { AdjustWindowRect(&mut rc, style, false) };
     let ww = rc.right - rc.left;
@@ -231,32 +234,31 @@ fn run(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &TelegramCl
         format!("Still need {} today.", format_hm(need))
     };
     let lines = day_totals::action_window_lines(store, cfg.daily_hours_required);
-    let recent = {
-        let body: Vec<_> = lines.iter().skip(1).take(6).cloned().collect();
-        if body.is_empty() {
-            "No earlier days stored yet.".into()
-        } else {
-            body.join("\n")
-        }
+    let recent_lines: Vec<String> = lines.iter().skip(1).take(4).cloned().collect();
+    let recent = if recent_lines.is_empty() {
+        "No earlier days stored yet.".into()
+    } else {
+        recent_lines.join("\n")
     };
+    let recent_h = ((recent_lines.len().max(1) as i32) * LINE).max(LINE);
     let user = windows_user();
     let sub = store.get_subscriber(&user).ok().flatten();
     let subscribed = sub.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
     let sub_txt = match &sub {
         Some(id) if id.len() > 4 => format!(
-            "You already receive a daily Telegram summary (chat …{}).",
+            "On — you get a daily Telegram summary (chat …{}).",
             &id[id.len() - 4..]
         ),
-        Some(_) => "You already receive a daily Telegram summary.".into(),
-        None => "Not subscribed. You do not get a daily Telegram message.".into(),
+        Some(_) => "On — you get a daily Telegram summary.".into(),
+        None => "Off — you do not get a daily Telegram message.".into(),
     };
     let question = if subscribed {
         "Keep receiving daily updates?"
     } else {
-        "Do you want a Telegram message each day with your tracked time?"
+        "Want a Telegram message each day with your tracked time?"
     };
     let chat_label = if subscribed {
-        "New Telegram chat id (only if you want to change it)"
+        "New chat id (optional — only to change)"
     } else {
         "Your Telegram chat id"
     };
@@ -271,15 +273,12 @@ fn run(cfg: &AppConfig, store: &Store, loc: Option<&GeoFix>, client: &TelegramCl
         "No thanks".into()
     };
     let how_txt = if subscribed {
-        "To change where the daily message goes: get a new chat id with @userinfobot (same steps as below), paste it, then tap Yes.\n\n\
-How to get a chat id:\n\
-1. Open Telegram. Search @userinfobot and open it.\n\
-2. Tap Start. Copy the Id number it shows.\n\
-3. Open the Ftracker bot and tap Start so it can message you."
-            .into()
+        HOWTO_CHANGE.to_string()
     } else {
         HOWTO.to_string()
     };
+    let how_lines = how_txt.lines().count().max(1) as i32;
+    let how_h = how_lines * LINE + 4;
 
     let font = unsafe { CreateFontW(-dpi::px(16), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
     let font_title = unsafe { CreateFontW(-dpi::px(22), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
@@ -305,45 +304,61 @@ How to get a chat id:\n\
         finished: false,
         yes_label,
         no_label,
+        scroll: 0,
+        content_h: 0,
     };
     unsafe { set_user_data(hwnd, &mut state as *mut ActionState as isize) };
 
     let inst_h = windows::Win32::Foundation::HINSTANCE(inst.0);
     let p = dpi::px;
     let wrap = WINDOW_STYLE(0x2000); // SS_EDITCONTROL — wrap long lines
+    let x = p(PAD);
+    let cw = p(WIN_W - PAD * 2);
 
     unsafe {
+        let mut y = p(14);
         let title = ctrl(
             w!("STATIC"),
             w!("Today"),
             WS_CHILD | WS_VISIBLE,
             Default::default(),
-            p(28),
-            p(16),
-            p(484),
-            p(28),
+            x,
+            y,
+            cw,
+            p(26),
             hwnd,
             0,
             inst_h,
         );
-        let today_h = stat(&today_txt, p(28), p(44), p(484), p(28), hwnd, IDC_TODAY, inst_h, wrap);
-        let remain_h = stat(&remain_txt, p(28), p(72), p(484), p(22), hwnd, IDC_REMAIN, inst_h, wrap);
-        label("Recent days", p(28), p(104), hwnd, inst_h);
-        let recent_h = stat(&recent, p(28), p(124), p(484), p(110), hwnd, IDC_RECENT, inst_h, wrap);
-        label("Daily Telegram updates", p(28), p(242), hwnd, inst_h);
-        let sub_h = stat(&sub_txt, p(28), p(262), p(484), p(36), hwnd, IDC_SUBSTATUS, inst_h, wrap);
-        let q_h = stat(question, p(28), p(300), p(484), p(36), hwnd, IDC_Q, inst_h, wrap);
-        label(chat_label, p(28), p(340), hwnd, inst_h);
-        state.chat = field("", p(28), p(360), p(484), p(40), hwnd, IDC_CHAT, inst_h);
-        let how_h = stat(&how_txt, p(28), p(408), p(484), p(118), hwnd, IDC_HOWTO, inst_h, wrap);
-        state.err = stat("", p(28), p(528), p(484), p(22), hwnd, IDC_ERR, inst_h, wrap);
+        y += p(26);
+        let today_h = stat(&today_txt, x, y, cw, p(24), hwnd, IDC_TODAY, inst_h, wrap);
+        y += p(24);
+        let remain_h = stat(&remain_txt, x, y, cw, p(LINE), hwnd, IDC_REMAIN, inst_h, wrap);
+        y += p(LINE + 10);
+        label("Recent days", x, y, hwnd, inst_h);
+        y += p(LINE);
+        let recent_ctl = stat(&recent, x, y, cw, p(recent_h), hwnd, IDC_RECENT, inst_h, wrap);
+        y += p(recent_h + 14);
+        label("Daily Telegram updates", x, y, hwnd, inst_h);
+        y += p(LINE);
+        let sub_h = stat(&sub_txt, x, y, cw, p(LINE), hwnd, IDC_SUBSTATUS, inst_h, wrap);
+        y += p(LINE + 4);
+        let q_h = stat(question, x, y, cw, p(22), hwnd, IDC_Q, inst_h, wrap);
+        y += p(22 + 8);
+        label(chat_label, x, y, hwnd, inst_h);
+        y += p(LINE);
+        state.chat = field("", x, y, cw, p(40), hwnd, IDC_CHAT, inst_h);
+        y += p(40 + 8);
+        let how_ctl = stat(&how_txt, x, y, cw, p(how_h), hwnd, IDC_HOWTO, inst_h, wrap);
+        y += p(how_h + 4);
+        state.err = stat("", x, y, cw, p(LINE), hwnd, IDC_ERR, inst_h, wrap);
+        y += p(LINE + 12);
 
         let owner = windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(
             windows::Win32::UI::WindowsAndMessaging::BS_OWNERDRAW as u32,
         );
-        let by = p(556);
-        let yes_w = p(220);
-        let no_w = p(150);
+        let yes_w = p(210);
+        let no_w = p(140);
         let no_wstr = wide(&state.no_label);
         let yes_wstr = wide(&state.yes_label);
         state.btn_no = ctrl(
@@ -351,8 +366,8 @@ How to get a chat id:\n\
             PCWSTR(no_wstr.as_ptr()),
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | owner,
             Default::default(),
-            p(28),
-            by,
+            x,
+            y,
             no_w,
             p(40),
             hwnd,
@@ -364,14 +379,16 @@ How to get a chat id:\n\
             PCWSTR(yes_wstr.as_ptr()),
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | owner,
             Default::default(),
-            p(WIN_W) - p(28) - yes_w,
-            by,
+            p(WIN_W) - p(PAD) - yes_w,
+            y,
             yes_w,
             p(40),
             hwnd,
             IDOK,
             inst_h,
         );
+        y += p(40 + 16);
+        state.content_h = y;
 
         let setf = |h: HWND, f: HFONT| {
             SendMessageW(
@@ -384,11 +401,11 @@ How to get a chat id:\n\
         setf(title, font_title);
         setf(today_h, font_num);
         setf(remain_h, font_small);
-        setf(recent_h, font_small);
+        setf(recent_ctl, font_small);
         setf(sub_h, font_small);
         setf(q_h, font);
         setf(state.chat, font);
-        setf(how_h, font_small);
+        setf(how_ctl, font_small);
         setf(state.err, font_small);
         setf(state.btn_yes, font_btn);
         setf(state.btn_no, font_btn);
@@ -397,6 +414,7 @@ How to get a chat id:\n\
         setf(today_h, font_num);
         setf(q_h, font);
 
+        fit_window(hwnd, state.content_h);
         let _ = ShowWindow(hwnd, SW_SHOW);
         let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(state.chat);
         let _ = windows::Win32::UI::WindowsAndMessaging::SetTimer(hwnd, 1, 40, None);
@@ -411,6 +429,11 @@ How to get a chat id:\n\
                 windows::Win32::UI::WindowsAndMessaging::PostQuitMessage(0);
             }
             break;
+        }
+        if msg.message == 0x020A {
+            let delta = ((msg.wParam.0 as u32 >> 16) as i16 as i32) / 120;
+            scroll_by(hwnd, &mut state, -delta * dpi::px(LINE * 3));
+            continue;
         }
         if unsafe { IsDialogMessageW(hwnd, &msg) }.0 != 0 {
             continue;
@@ -429,6 +452,117 @@ How to get a chat id:\n\
         let _ = DeleteObject(HGDIOBJ(font_btn.0));
         let _ = DeleteObject(HGDIOBJ(white.0));
         let _ = DeleteObject(HGDIOBJ(bg.0));
+    }
+}
+
+#[cfg(windows)]
+fn client_h(hwnd: windows::Win32::Foundation::HWND) -> i32 {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
+    let mut rc = RECT::default();
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut rc);
+    }
+    rc.bottom - rc.top
+}
+
+#[cfg(windows)]
+fn fit_window(hwnd: windows::Win32::Foundation::HWND, content_h: i32) {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        AdjustWindowRect, GetWindowLongW, GetWindowRect, SetWindowPos, GWL_STYLE,
+        SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW, HWND_TOP,
+        SWP_NOACTIVATE, SWP_NOZORDER,
+    };
+    let mut wa = RECT::default();
+    unsafe {
+        let _ = SystemParametersInfoW(
+            SPI_GETWORKAREA,
+            0,
+            Some((&mut wa as *mut RECT).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        );
+    }
+    let max_client = (wa.bottom - wa.top - dpi::px(72)).max(dpi::px(280));
+    let client = content_h.min(max_client);
+    let style = unsafe { GetWindowLongW(hwnd, GWL_STYLE) } as u32;
+    let mut rc = RECT {
+        left: 0,
+        top: 0,
+        right: dpi::px(WIN_W),
+        bottom: client,
+    };
+    let _ = unsafe { AdjustWindowRect(&mut rc, windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE(style), false) };
+    let ww = rc.right - rc.left;
+    let hh = rc.bottom - rc.top;
+    let mut wr = RECT::default();
+    unsafe {
+        let _ = GetWindowRect(hwnd, &mut wr);
+    }
+    let x = wr.left + (wr.right - wr.left - ww) / 2;
+    let y = wr.top + (wr.bottom - wr.top - hh) / 2;
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOP,
+            x.max(wa.left),
+            y.max(wa.top),
+            ww,
+            hh,
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+}
+
+#[cfg(windows)]
+fn scroll_by(hwnd: windows::Win32::Foundation::HWND, state: &mut ActionState, dy: i32) {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT};
+    use windows::Win32::Graphics::Gdi::ScreenToClient;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumChildWindows, GetParent, GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE,
+        SWP_NOZORDER,
+    };
+    let view = client_h(hwnd);
+    let max = (state.content_h - view).max(0);
+    let new = (state.scroll + dy).clamp(0, max);
+    let delta = new - state.scroll;
+    if delta == 0 {
+        return;
+    }
+    state.scroll = new;
+    struct Acc {
+        parent: HWND,
+        dy: i32,
+    }
+    let mut acc = Acc {
+        parent: hwnd,
+        dy: -delta,
+    };
+    unsafe extern "system" fn cb(child: HWND, lp: LPARAM) -> BOOL {
+        let acc = &*(lp.0 as *const Acc);
+        if GetParent(child) != acc.parent {
+            return BOOL(1);
+        }
+        let mut rc = RECT::default();
+        let _ = GetWindowRect(child, &mut rc);
+        let mut pt = POINT {
+            x: rc.left,
+            y: rc.top,
+        };
+        let _ = ScreenToClient(acc.parent, &mut pt);
+        let _ = SetWindowPos(
+            child,
+            HWND(0),
+            pt.x,
+            pt.y + acc.dy,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+        BOOL(1)
+    }
+    unsafe {
+        let _ = EnumChildWindows(hwnd, Some(cb), LPARAM(&mut acc as *mut Acc as isize));
     }
 }
 
@@ -534,8 +668,8 @@ fn label(
             Default::default(),
             x,
             y,
-            dpi::px(484),
-            dpi::px(18),
+            dpi::px(WIN_W - PAD * 2),
+            dpi::px(LINE),
             parent,
             0,
             inst,

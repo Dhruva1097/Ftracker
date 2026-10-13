@@ -48,7 +48,11 @@ pub struct SessionState {
 }
 
 pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
+    ui::log(format!(
+        "session run restarted={restarted} user_launch={user_launch}"
+    ));
     if crate::mutex::already_running() {
+        ui::log("already running — not starting a second session");
         if user_launch {
             ui::tray::request_show();
         }
@@ -67,9 +71,11 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
                 Ok(_) => false,
             };
             if corrupt {
+                ui::log("config load: SECRETS_CORRUPT");
                 ui::totp_dialog::error("SECRETS_CORRUPT");
                 return Err(other.unwrap_err());
             }
+            ui::log("not registered — opening enroll");
             let _ = crate::enroll::ensure();
             match AppConfig::load() {
                 Ok(c) if c.is_registered() => c,
@@ -77,6 +83,7 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
                 Err(e) => {
                     let msg = format!("{e:#}");
                     if msg.contains("not registered") {
+                        ui::log("enroll finished: still not registered (quiet exit)");
                         return Ok(());
                     }
                     if msg.contains("SECRETS_CORRUPT") || msg.contains("CryptUnprotect") {
@@ -87,10 +94,12 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
             }
         }
     };
+    ui::log("registered — starting session");
     crate::permissions::ensure_at_start();
     let store = match Store::open(&cfg) {
         Ok(s) => s,
         Err(e) => {
+            ui::log(format!("store open failed: {e:#}"));
             let client = TelegramClient::new(&cfg.telegram_bot_token);
             let loc = location::current();
             let _ = client.send_admin(
@@ -165,6 +174,7 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
         admin_jobs,
     };
     state.on_start()?;
+    ui::log("entering tray message loop");
     ui::tray::run_message_loop(&mut state, user_launch)
 }
 

@@ -17,9 +17,20 @@ mod ui;
 mod uninstall;
 
 fn main() {
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("Ftracker panic: {info}");
+        if let Some(loc) = info.location() {
+            eprintln!("  at {}:{}:{}", loc.file(), loc.line(), loc.column());
+        }
+        let _ = std::io::Write::flush(&mut std::io::stderr());
+    }));
+    ui::log("starting");
     ui::dpi::enable();
     ftracker_core::config::load_dotenv();
-    let cmd = cli::parse(std::env::args().skip(1).collect());
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    ui::log(format!("args: {args:?}"));
+    let cmd = cli::parse(args);
+    ui::log(format!("command: {cmd:?}"));
     let result = match cmd {
         cli::Cmd::Run { restarted } => app::run(restarted, true),
         cli::Cmd::Enroll { preassigned } => enroll::run(preassigned),
@@ -29,7 +40,8 @@ fn main() {
     };
     if let Err(e) = result {
         let msg = format!("{e:#}");
-        eprintln!("Ftracker: {msg}");
+        eprintln!("Ftracker error: {msg}");
+        let _ = std::io::Write::flush(&mut std::io::stderr());
         #[cfg(not(debug_assertions))]
         {
             let _ = tinyfiledialogs::message_box_ok(
@@ -46,5 +58,7 @@ fn main() {
         if !handled {
             std::process::exit(1);
         }
+    } else {
+        ui::log("exit ok");
     }
 }

@@ -1,5 +1,4 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 include!("src/ui/logo_paint.rs");
 
@@ -28,58 +27,6 @@ fn main() {
         println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", path.display());
     }
-
-    if let Some(res) = compile_icon_res(&ico_path) {
-        println!("cargo:rustc-link-arg={}", res.display());
-    }
-}
-
-fn compile_icon_res(ico: &Path) -> Option<PathBuf> {
-    let out = PathBuf::from(std::env::var("OUT_DIR").ok()?);
-    let rc_path = out.join("ftracker.rc");
-    let res_path = out.join("ftracker.res");
-    let ico_s = ico.display().to_string().replace('\\', "/");
-    std::fs::write(&rc_path, format!("1 ICON \"{ico_s}\"\r\n")).ok()?;
-    let rc = find_rc()?;
-    let status = Command::new(rc)
-        .args([
-            "/nologo",
-            "/fo",
-            res_path.to_str()?,
-            rc_path.to_str()?,
-        ])
-        .status()
-        .ok()?;
-    if status.success() && res_path.exists() {
-        Some(res_path)
-    } else {
-        None
-    }
-}
-
-fn find_rc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("where").arg("rc.exe").output() {
-        if out.status.success() {
-            let line = String::from_utf8_lossy(&out.stdout)
-                .lines()
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if !line.is_empty() {
-                return Some(PathBuf::from(line));
-            }
-        }
-    }
-    let kits = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\bin");
-    let entries = std::fs::read_dir(kits).ok()?;
-    let mut vers: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
-    vers.sort();
-    for ver in vers.into_iter().rev() {
-        let p = ver.join("x64").join("rc.exe");
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    None
+    // Do not link ftracker.res into the exe here: a bad resource section
+    // crashes at process start with 0xC0000005 before any Rust log runs.
 }

@@ -160,6 +160,7 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
         TranslateMessage, MSG, WNDCLASSW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
     };
 
+    crate::ui::log("tray: creating host window");
     let class: Vec<u16> = "FtrackerTrayHost\0".encode_utf16().collect();
     let inst = unsafe { GetModuleHandleW(None)? };
     let wc = WNDCLASSW {
@@ -190,6 +191,7 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
     if hwnd.0 == 0 {
         anyhow::bail!("tray host window failed");
     }
+    crate::ui::log(format!("tray: host hwnd={}", hwnd.0));
     unsafe {
         set_user_data(hwnd, state as *mut SessionState as isize);
         let _ = SetTimer(hwnd, 1, 1000, None);
@@ -197,6 +199,7 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
     crate::ui::logo::apply(hwnd);
     state.on_paint();
     tray_add(hwnd, &tip_text(Some(state)));
+    crate::ui::log("tray: notify icon added — look next to the clock (or ^ overflow)");
     let _ = taskbar_created_msg();
 
     let mut msg = MSG::default();

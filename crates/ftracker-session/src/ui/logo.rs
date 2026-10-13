@@ -38,23 +38,17 @@ fn hicon(n: i32) -> HICON {
         let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
         let hbmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &mut bits, None, 0).unwrap_or(HBITMAP(0));
         if hbmp.0 == 0 || bits.is_null() {
+            crate::ui::log("logo: color DIB failed");
             let _ = DeleteDC(hdc);
             return HICON(0);
         }
         std::ptr::copy_nonoverlapping(bgra.as_ptr(), bits as *mut u8, bgra.len());
-        let mut mask_bmi = bmi;
-        let mut mask_bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let hmask = CreateDIBSection(
-            hdc,
-            &mut mask_bmi,
-            DIB_RGB_COLORS,
-            &mut mask_bits,
-            None,
-            0,
-        )
-        .unwrap_or(HBITMAP(0));
-        if hmask.0 != 0 && !mask_bits.is_null() {
-            std::slice::from_raw_parts_mut(mask_bits as *mut u8, (n * n * 4) as usize).fill(0);
+        let hmask = windows::Win32::Graphics::Gdi::CreateBitmap(n, n, 1, 1, None);
+        if hmask.0 == 0 {
+            let _ = DeleteObject(windows::Win32::Graphics::Gdi::HGDIOBJ(hbmp.0));
+            let _ = DeleteDC(hdc);
+            crate::ui::log("logo: 1-bit mask bitmap failed");
+            return HICON(0);
         }
         let info = ICONINFO {
             fIcon: BOOL(1),
@@ -64,10 +58,11 @@ fn hicon(n: i32) -> HICON {
             hbmColor: hbmp,
         };
         let icon = CreateIconIndirect(&info).unwrap_or(HICON(0));
-        if hmask.0 != 0 {
-            let _ = DeleteObject(hmask);
+        if icon.0 == 0 {
+            crate::ui::log("logo: CreateIconIndirect failed");
         }
-        let _ = DeleteObject(hbmp);
+        let _ = DeleteObject(windows::Win32::Graphics::Gdi::HGDIOBJ(hmask.0));
+        let _ = DeleteObject(windows::Win32::Graphics::Gdi::HGDIOBJ(hbmp.0));
         let _ = DeleteDC(hdc);
         icon
     }
@@ -104,18 +99,24 @@ pub fn apply(hwnd: HWND) {
     if hwnd.0 == 0 {
         return;
     }
+    let sm = small();
+    let lg = large();
+    if sm.0 == 0 || lg.0 == 0 {
+        crate::ui::log("logo: skip WM_SETICON (icon handle is 0)");
+        return;
+    }
     unsafe {
         SendMessageW(
             hwnd,
             WM_SETICON,
             windows::Win32::Foundation::WPARAM(ICON_SMALL as usize),
-            windows::Win32::Foundation::LPARAM(small().0),
+            windows::Win32::Foundation::LPARAM(sm.0),
         );
         SendMessageW(
             hwnd,
             WM_SETICON,
             windows::Win32::Foundation::WPARAM(ICON_BIG as usize),
-            windows::Win32::Foundation::LPARAM(large().0),
+            windows::Win32::Foundation::LPARAM(lg.0),
         );
     }
 }
