@@ -5,6 +5,7 @@ pub enum Cmd {
     Uninstall { otp: Option<String> },
     NativeHost,
     EnsureRunning,
+    Service { console: bool },
 }
 
 pub fn parse(args: Vec<String>) -> Cmd {
@@ -13,6 +14,8 @@ pub fn parse(args: Vec<String>) -> Cmd {
     let mut uninstall = false;
     let mut native = false;
     let mut ensure = false;
+    let mut service = false;
+    let mut console = false;
     let mut otp = None;
     let mut i = 0;
     while i < args.len() {
@@ -22,6 +25,8 @@ pub fn parse(args: Vec<String>) -> Cmd {
             "--uninstall" => uninstall = true,
             "--native-host" => native = true,
             "--ensure-running" => ensure = true,
+            "--service" => service = true,
+            "--console" => console = true,
             "--otp" => {
                 if i + 1 < args.len() {
                     i += 1;
@@ -35,6 +40,8 @@ pub fn parse(args: Vec<String>) -> Cmd {
     }
     if native {
         Cmd::NativeHost
+    } else if service || console {
+        Cmd::Service { console: console || !service }
     } else if ensure {
         Cmd::EnsureRunning
     } else if uninstall {
@@ -63,6 +70,8 @@ mod tests {
         ));
         assert!(matches!(p(&["--ensure-running"]), Cmd::EnsureRunning));
         assert!(matches!(p(&["--native-host"]), Cmd::NativeHost));
+        assert!(matches!(p(&["--service"]), Cmd::Service { console: false }));
+        assert!(matches!(p(&["--console"]), Cmd::Service { console: true }));
         match p(&["--uninstall", "--otp", "123456"]) {
             Cmd::Uninstall { otp } => assert_eq!(otp.as_deref(), Some("123456")),
             _ => panic!("expected uninstall"),

@@ -171,7 +171,6 @@ export class Build {
     const wxs = [
       "Product.wxs",
       "Files.wxs",
-      "Service.wxs",
       "Tasks.wxs",
       "ExtensionPolicies.wxs",
       "UI.wxs",
@@ -275,24 +274,8 @@ export class Build {
     await fs.mkdir(path.join(this.root, "dist"), { recursive: true });
     const copies = [
       [
-        path.join(this.root, "target", "wix", "Ftracker-1.0.0-x64.msi"),
-        "Ftracker-1.0.0-x64.msi",
-      ],
-      [
         path.join(this.root, "target", "x86_64-pc-windows-msvc", "release", "ftracker.exe"),
-        path.join("x64", "ftracker.exe"),
-      ],
-      [
-        path.join(this.root, "target", "x86_64-pc-windows-msvc", "release", "ftracker-svc.exe"),
-        path.join("x64", "ftracker-svc.exe"),
-      ],
-      [
-        path.join(this.root, "target", "i686-pc-windows-msvc", "release", "ftracker.exe"),
-        path.join("x86", "ftracker.exe"),
-      ],
-      [
-        path.join(this.root, "target", "i686-pc-windows-msvc", "release", "ftracker-svc.exe"),
-        path.join("x86", "ftracker-svc.exe"),
+        "ftracker.exe",
       ],
     ];
     for (const [src, rel] of copies) {
@@ -303,10 +286,7 @@ export class Build {
   async printOutputs() {
     const artifacts = [
       path.join(this.root, "dist", "Ftracker-1.0.0-x64.msi"),
-      path.join(this.root, "dist", "x64", "ftracker.exe"),
-      path.join(this.root, "dist", "x64", "ftracker-svc.exe"),
-      path.join(this.root, "dist", "x86", "ftracker.exe"),
-      path.join(this.root, "dist", "x86", "ftracker-svc.exe"),
+      path.join(this.root, "dist", "ftracker.exe"),
     ];
     const found = [];
     for (const p of artifacts) {

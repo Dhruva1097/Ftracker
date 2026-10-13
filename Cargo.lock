@@ -521,6 +521,7 @@ dependencies = [
  "chrono",
  "ftracker-core",
  "ftracker-ipc",
+ "ftracker-service",
  "image",
  "reqwest",
  "serde",

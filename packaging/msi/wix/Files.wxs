@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
   <?include $(sys.SOURCEFILEDIR)Config.wxi ?>
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLDIR">
       <Component Id="FtrackerExeComp" Guid="{C1D2E3F4-A5B6-4789-9C0D-1E2F3A4B5C6D}" Win64="$(var.Win64)">
         <File Id="FtrackerExe" Source="!(bindpath.bin)\ftracker.exe" KeyPath="yes" />
+        <ServiceInstall Id="FtrackerSvcInstall" Name="FtrackerSvc" DisplayName="Ftracker USB and integrity service"
+                        Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem"
+                        Arguments="--service">
+          <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart"
+                              ThirdFailureActionType="restart" RestartServiceDelayInSeconds="60" ResetPeriodInDays="1" />
+        </ServiceInstall>
+        <ServiceControl Id="FtrackerSvcControl" Name="FtrackerSvc" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
         <RegistryKey Root="HKLM" Key="Software\Ftracker">
           <RegistryValue Name="ProductCode" Type="string" Value="$(var.ProductCode)" />
           <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLDIR]" />

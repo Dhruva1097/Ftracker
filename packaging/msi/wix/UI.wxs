@@ -21,7 +21,11 @@
       </Dialog>
       <InstallUISequence>
         <Show Dialog="ConsentDlg" After="CostFinalize">NOT Installed AND NOT PREASSIGNED</Show>
+        <ExecuteAction Sequence="1300" />
       </InstallUISequence>
+      <AdminUISequence>
+        <ExecuteAction Sequence="1300" />
+      </AdminUISequence>
     </UI>
   </Fragment>
 </Wix>

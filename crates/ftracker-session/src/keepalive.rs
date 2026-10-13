@@ -13,8 +13,15 @@ pub fn check_service_integrity(
     loc: Option<&GeoFix>,
     client: &TelegramClient,
 ) {
-    let path = paths::sibling("ftracker-svc.exe");
-    if let Some(find) = integrity::check_peer(&path, &cfg.service_sha256, "ftracker-svc.exe") {
+    let path = {
+        let svc = paths::sibling("ftracker-svc.exe");
+        if svc.exists() {
+            svc
+        } else {
+            paths::this_exe()
+        }
+    };
+    if let Some(find) = integrity::check_peer(&path, &cfg.service_sha256, "ftracker.exe") {
         let hour = ftracker_core::report::day_totals::current_hour_start();
         let already = store
             .and_then(|s| s.integrity_alert_logged(&find.file, &find.reason, &hour).ok())
@@ -51,6 +58,10 @@ pub fn hash_installed_exes() -> Result<(String, String)> {
     };
     let service = paths::sibling("ftracker-svc.exe");
     let a = integrity::sha256_file(&session).unwrap_or_default();
-    let b = integrity::sha256_file(&service).unwrap_or_default();
+    let b = if service.exists() {
+        integrity::sha256_file(&service).unwrap_or_default()
+    } else {
+        a.clone()
+    };
     Ok((a, b))
 }

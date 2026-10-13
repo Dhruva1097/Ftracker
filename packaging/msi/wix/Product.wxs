@@ -17,7 +17,6 @@
     <?endif ?>
     <Feature Id="ProductFeature" Title="Ftracker" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
-      <ComponentGroupRef Id="ServiceComponents" />
       <ComponentGroupRef Id="TaskComponents" />
       <ComponentGroupRef Id="ExtensionComponents" />
       <ComponentGroupRef Id="NativeHostComponents" />
@@ -26,11 +25,9 @@
       <?endif ?>
     </Feature>
     <UIRef Id="FtrackerUI" />
-    <CustomAction Id="EnrollInteractive" FileKey="FtrackerExe" ExeCommand="--enroll" Execute="deferred" Impersonate="no" Return="check" />
-    <CustomAction Id="EnrollPreassigned" FileKey="FtrackerExe" ExeCommand="--enroll --preassigned" Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="LaunchFtracker" FileKey="FtrackerExe" ExeCommand="" Execute="immediate" Impersonate="yes" Return="asyncNoWait" />
     <InstallExecuteSequence>
-      <Custom Action="EnrollInteractive" After="InstallFiles">NOT Installed AND NOT PREASSIGNED AND NOT UPGRADINGPRODUCTCODE</Custom>
-      <Custom Action="EnrollPreassigned" After="InstallFiles">NOT Installed AND PREASSIGNED AND NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="LaunchFtracker" After="InstallFinalize">NOT Installed AND NOT UPGRADINGPRODUCTCODE</Custom>
     </InstallExecuteSequence>
   </Product>
   <Fragment>

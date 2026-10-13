@@ -38,6 +38,14 @@ fn main() {
         cli::Cmd::Uninstall { otp } => uninstall::run(otp),
         cli::Cmd::NativeHost => native_host::run(),
         cli::Cmd::EnsureRunning => app::run(true, false),
+        cli::Cmd::Service { console } => {
+            if console {
+                ftracker_service::service::run_worker();
+                Ok(())
+            } else {
+                ftracker_service::start_dispatcher()
+            }
+        }
     };
     if let Err(e) = result {
         let msg = format!("{e:#}");
