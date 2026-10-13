@@ -14,7 +14,7 @@
         </ServiceInstall>
         <ServiceControl Id="FtrackerSvcControl" Name="FtrackerSvc" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
         <RegistryKey Root="HKLM" Key="Software\Ftracker">
-          <RegistryValue Name="ProductCode" Type="string" Value="$(var.ProductCode)" />
+          <RegistryValue Name="ProductCode" Type="string" Value="[ProductCode]" />
           <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLDIR]" />
         </RegistryKey>
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="Ftracker" Type="string" Value="&quot;[INSTALLDIR]ftracker.exe&quot;" />
