@@ -20,6 +20,13 @@ pub fn capture_jpeg(max_width: u32, quality: u8) -> Result<Option<(Vec<u8>, u64)
     if w <= 0 || h <= 0 {
         return Ok(None);
     }
+    let nbytes = (w as usize)
+        .saturating_mul(h as usize)
+        .saturating_mul(4);
+    const MAX_SHOT: usize = 64 * 1024 * 1024;
+    if nbytes == 0 || nbytes > MAX_SHOT {
+        return Ok(None);
+    }
     let hwnd = HWND(0);
     let hdc = unsafe { GetDC(hwnd) };
     if hdc.0 == 0 {
@@ -42,7 +49,7 @@ pub fn capture_jpeg(max_width: u32, quality: u8) -> Result<Option<(Vec<u8>, u64)
             },
             ..Default::default()
         };
-        let mut buf = vec![0u8; (w * h * 4) as usize];
+        let mut buf = vec![0u8; nbytes];
         GetDIBits(
             mem,
             bmp,
@@ -65,8 +72,13 @@ pub fn capture_jpeg(max_width: u32, quality: u8) -> Result<Option<(Vec<u8>, u64)
 }
 
 fn bgra_to_rgba(bgra: &[u8], w: u32, h: u32) -> Vec<u8> {
-    let mut out = vec![0u8; (w * h * 4) as usize];
-    for i in 0..(w * h) as usize {
+    let n = (w as usize)
+        .saturating_mul(h as usize)
+        .saturating_mul(4)
+        .min(bgra.len());
+    let mut out = vec![0u8; n];
+    let pixels = n / 4;
+    for i in 0..pixels {
         let o = i * 4;
         out[o] = bgra[o + 2];
         out[o + 1] = bgra[o + 1];

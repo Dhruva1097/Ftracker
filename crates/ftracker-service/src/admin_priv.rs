@@ -1,18 +1,18 @@
 //! Privileged file copy/delete/stage and program uninstall as LocalSystem.
 
 use std::fs;
-use std::io;
 use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
+use ftracker_core::fs_admin;
 use ftracker_core::paths;
 
 pub fn execute(op: &str, path: &str, dest: &str) -> (bool, String) {
     match op {
         "delete" => match delete_any(Path::new(path)) {
-            Ok(n) => (true, format!("deleted {} ({})", path, fmt_size(n))),
+            Ok(()) => (true, format!("deleted {path}")),
             Err(e) => (false, e),
         },
         "copy" => match copy_any(Path::new(path), Path::new(dest)) {
@@ -38,72 +38,30 @@ fn refuse_delete(path: &Path) -> Option<&'static str> {
     None
 }
 
-fn delete_any(path: &Path) -> Result<u64, String> {
+fn delete_any(path: &Path) -> Result<(), String> {
     if let Some(msg) = refuse_delete(path) {
         return Err(msg.into());
     }
-    let size = dir_size(path).unwrap_or(0);
-    let r = if path.is_dir() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    };
-    r.map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(size)
+    fs_admin::delete_tree(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn copy_any(src: &Path, dest: &Path) -> Result<u64, String> {
     if paths::is_protected_admin_path(dest) {
         return Err("refused: Windows or Ftracker path".into());
     }
-    copy_recursive(src, dest).map_err(|e| format!("{} -> {}: {e}", src.display(), dest.display()))
-}
-
-fn copy_recursive(src: &Path, dest: &Path) -> io::Result<u64> {
-    if src.is_dir() {
-        fs::create_dir_all(dest)?;
-        let mut total = 0u64;
-        for e in fs::read_dir(src)? {
-            let e = e?;
-            total += copy_recursive(&e.path(), &dest.join(e.file_name()))?;
-        }
-        Ok(total)
-    } else {
-        let dest = if dest.is_dir() {
-            dest.join(src.file_name().unwrap_or_default())
-        } else {
-            dest.to_path_buf()
-        };
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::copy(src, dest)
-    }
-}
-
-fn dir_size(path: &Path) -> io::Result<u64> {
-    if path.is_file() {
-        return Ok(fs::metadata(path)?.len());
-    }
-    let mut n = 0u64;
-    if let Ok(rd) = fs::read_dir(path) {
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                n = n.saturating_add(dir_size(&p).unwrap_or(0));
-            } else {
-                n = n.saturating_add(e.metadata().map(|m| m.len()).unwrap_or(0));
-            }
-        }
-    }
-    Ok(n)
+    fs_admin::copy_tree(src, dest)
+        .map_err(|e| format!("{} -> {}: {e}", src.display(), dest.display()))
 }
 
 fn stage_file(src: &Path, dest: &Path) -> Result<u64, String> {
-    if src.is_dir() {
+    let meta = match fs::symlink_metadata(src) {
+        Ok(m) => m,
+        Err(e) => return Err(format!("{}: {e}", src.display())),
+    };
+    if meta.file_type().is_dir() {
         return Err("path is a folder".into());
     }
-    let n = fs::metadata(src).map(|m| m.len()).unwrap_or(0);
+    let n = meta.len();
     if n > 50 * 1024 * 1024 {
         return Err(format!("file is {} (Telegram max 50 MB)", fmt_size(n)));
     }

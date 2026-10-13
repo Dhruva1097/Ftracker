@@ -52,6 +52,10 @@ impl TelegramClient {
         }
     }
 
+    pub fn fresh(&self) -> Self {
+        Self::new(self.token.clone())
+    }
+
     fn url(&self, method: &str) -> String {
         format!("https://api.telegram.org/bot{}/{method}", self.token)
     }

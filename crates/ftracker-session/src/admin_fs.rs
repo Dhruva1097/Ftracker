@@ -1,14 +1,13 @@
 //! Session-side listing, copy, delete, and installed-program enumeration.
 
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
+use ftracker_core::fs_admin;
 use ftracker_core::paths;
 
 pub const TG_MAX_DOC: u64 = 50 * 1024 * 1024;
-const LIST_CAP: usize = 240;
 
 #[derive(Debug, Clone)]
 pub struct DirListing {
@@ -85,37 +84,13 @@ pub fn list_dir(path: &Path) -> Result<DirListing> {
     } else {
         path.parent().map(|p| p.to_path_buf())
     };
-    let mut dirs = Vec::new();
-    let mut files = Vec::new();
-    let mut truncated = false;
-    let rd = fs::read_dir(path).map_err(|e| anyhow!("{}: {e}", path.display()))?;
-    let mut entries: Vec<fs::DirEntry> = rd.filter_map(|e| e.ok()).collect();
-    entries.sort_by(|a, b| {
-        a.file_name()
-            .to_string_lossy()
-            .to_ascii_lowercase()
-            .cmp(&b.file_name().to_string_lossy().to_ascii_lowercase())
-    });
-    for e in entries {
-        if dirs.len() + files.len() >= LIST_CAP {
-            truncated = true;
-            break;
-        }
-        let p = e.path();
-        let ft = e.file_type().ok();
-        if ft.map(|t| t.is_dir()).unwrap_or(false) || p.is_dir() {
-            dirs.push(p);
-        } else {
-            let sz = e.metadata().map(|m| m.len()).unwrap_or(0);
-            files.push((p, sz));
-        }
-    }
+    let list = fs_admin::list_dir(path).map_err(|e| anyhow!("{}: {e}", path.display()))?;
     Ok(DirListing {
         path: display,
         parent,
-        dirs,
-        files,
-        truncated,
+        dirs: list.dirs,
+        files: list.files,
+        truncated: list.truncated,
     })
 }
 
@@ -167,8 +142,8 @@ pub fn format_size(n: u64) -> String {
 }
 
 pub fn read_file_capped(path: &Path) -> Result<(Vec<u8>, u64)> {
-    let meta = fs::metadata(path)?;
-    if meta.is_dir() {
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_dir() {
         return Err(anyhow!("path is a folder"));
     }
     let n = meta.len();
@@ -183,73 +158,28 @@ pub fn copy_any(src: &Path, dest: &Path) -> Result<u64> {
     if let Some(msg) = refuse_write_dest(dest) {
         return Err(anyhow!("{msg}"));
     }
-    copy_recursive(src, dest).map_err(|e| anyhow!("{} -> {}: {e}", src.display(), dest.display()))
+    fs_admin::copy_tree(src, dest)
+        .map_err(|e| anyhow!("{} -> {}: {e}", src.display(), dest.display()))
 }
 
-fn copy_recursive(src: &Path, dest: &Path) -> io::Result<u64> {
-    if src.is_dir() {
-        fs::create_dir_all(dest)?;
-        let mut total = 0u64;
-        for e in fs::read_dir(src)? {
-            let e = e?;
-            total += copy_recursive(&e.path(), &dest.join(e.file_name()))?;
-        }
-        Ok(total)
-    } else {
-        let dest = if dest.is_dir() {
-            dest.join(src.file_name().unwrap_or_default())
-        } else {
-            dest.to_path_buf()
-        };
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::copy(src, dest)
-    }
-}
-
-pub fn delete_any(path: &Path) -> Result<u64> {
+pub fn delete_any(path: &Path) -> Result<()> {
     if let Some(msg) = refuse_delete(path) {
         return Err(anyhow!("{msg}"));
     }
-    let size = dir_size(path).unwrap_or(0);
-    if path.is_dir() {
-        fs::remove_dir_all(path).map_err(|e| anyhow!("{}: {e}", path.display()))?;
-    } else {
-        fs::remove_file(path).map_err(|e| anyhow!("{}: {e}", path.display()))?;
-    }
-    Ok(size)
-}
-
-fn dir_size(path: &Path) -> io::Result<u64> {
-    if path.is_file() {
-        return Ok(fs::metadata(path)?.len());
-    }
-    let mut n = 0u64;
-    if let Ok(rd) = fs::read_dir(path) {
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                n = n.saturating_add(dir_size(&p).unwrap_or(0));
-            } else {
-                n = n.saturating_add(e.metadata().map(|m| m.len()).unwrap_or(0));
-            }
-        }
-    }
-    Ok(n)
+    fs_admin::delete_tree(path).map_err(|e| anyhow!("{}: {e}", path.display()))
 }
 
 #[allow(dead_code)]
 pub fn format_programs(rows: &[InstalledProgram]) -> String {
     let mut s = String::from("Installed programs\n\n");
-    for p in rows.iter().take(LIST_CAP) {
+    for p in rows.iter().take(fs_admin::LIST_CAP) {
         if p.publisher.is_empty() {
             s.push_str(&format!("• {}\n", p.name));
         } else {
             s.push_str(&format!("• {} ({})\n", p.name, p.publisher));
         }
     }
-    if rows.len() > LIST_CAP {
+    if rows.len() > fs_admin::LIST_CAP {
         s.push_str("\n(truncated)\n");
     }
     if s.len() > 3500 {
@@ -506,5 +436,23 @@ mod tests {
             normalize_admin_path(r"C:\Users"),
             PathBuf::from(r"C:\Users")
         );
+    }
+
+    #[test]
+    fn list_dir_caps_at_core_limit() {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("ftsl{}{n}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        for i in 0..250 {
+            fs::write(dir.join(format!("a{i}.txt")), b"x").unwrap();
+        }
+        let list = list_dir(&dir).expect("list_dir");
+        let _ = fs_admin::delete_tree(&dir);
+        assert!(list.truncated);
+        assert_eq!(list.files.len() + list.dirs.len(), fs_admin::LIST_CAP);
+        assert!(!list.path.is_empty());
     }
 }

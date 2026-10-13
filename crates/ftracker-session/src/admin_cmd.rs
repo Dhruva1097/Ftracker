@@ -411,11 +411,15 @@ fn save_offset(state: &OffsetState) {
     }
 }
 
-fn worker_loop(client: TelegramClient, rx: Receiver<Job>, ipc: Sender<IpcMsg>) {
+fn worker_loop(mut client: TelegramClient, rx: Receiver<Job>, ipc: Sender<IpcMsg>) {
     while let Ok(job) = rx.recv() {
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             dispatch_job(&client, &ipc, job);
-        }));
+        }))
+        .is_err();
+        if panicked {
+            client = client.fresh();
+        }
     }
 }
 
@@ -795,7 +799,10 @@ fn do_get(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str
     let path = pbuf.to_string_lossy().into_owned();
     let p = pbuf.as_path();
     let path = path.as_str();
-    if p.is_dir() {
+    let is_folder = std::fs::symlink_metadata(p)
+        .map(|m| m.file_type().is_dir())
+        .unwrap_or(false);
+    if is_folder {
         send_log(client, ctx, "get", path, "path is a folder — use files");
         return;
     }
@@ -958,13 +965,7 @@ fn do_del(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str
     let pbuf = admin_fs::normalize_admin_path(path);
     let path = pbuf.to_string_lossy().into_owned();
     match admin_fs::delete_any(&pbuf) {
-        Ok(n) => send_log(
-            client,
-            ctx,
-            "del",
-            &path,
-            &format!("ok {}", admin_fs::format_size(n)),
-        ),
+        Ok(()) => send_log(client, ctx, "del", &path, "ok"),
         Err(e) if paths::is_access_denied(&e) => {
             request_system(
                 ipc,

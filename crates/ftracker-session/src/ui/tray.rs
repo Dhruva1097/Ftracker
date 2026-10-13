@@ -271,14 +271,14 @@ unsafe extern "system" fn wndproc(
     if msg == WM_TRAY {
         if is_tray_click(lparam) {
             if let Some(s) = state {
-                s.open_action();
+                swallow(|| s.open_action());
             }
         }
         return LRESULT(0);
     }
     if msg == WM_FT_DEVICE {
         if let Some(s) = state {
-            s.poll_ipc();
+            swallow(|| s.poll_ipc());
         }
         return LRESULT(0);
     }
@@ -289,21 +289,23 @@ unsafe extern "system" fn wndproc(
     match msg {
         x if x == WM_TIMER => {
             if let Some(s) = state {
-                s.on_timer();
-                tray_modify_tip(hwnd, &tip_text(Some(s)));
+                swallow(|| {
+                    s.on_timer();
+                    tray_modify_tip(hwnd, &tip_text(Some(s)));
+                });
             }
             LRESULT(0)
         }
         x if x == WM_QUERYENDSESSION => {
             if let Some(s) = state {
-                s.flush_for_shutdown_reason("logoff_or_shutdown");
+                swallow(|| s.flush_for_shutdown_reason("logoff_or_shutdown"));
             }
             LRESULT(1)
         }
         x if x == WM_ENDSESSION => {
             if wparam.0 != 0 {
                 if let Some(s) = state {
-                    s.flush_for_shutdown_reason("logoff_or_shutdown");
+                    swallow(|| s.flush_for_shutdown_reason("logoff_or_shutdown"));
                 }
                 tray_delete(hwnd);
                 PostQuitMessage(0);
@@ -313,7 +315,7 @@ unsafe extern "system" fn wndproc(
         x if x == WM_DESTROY => {
             HOST.store(0, Ordering::SeqCst);
             if let Some(s) = state {
-                s.flush_for_shutdown_reason("session_end");
+                swallow(|| s.flush_for_shutdown_reason("session_end"));
             }
             tray_delete(hwnd);
             PostQuitMessage(0);
@@ -321,6 +323,11 @@ unsafe extern "system" fn wndproc(
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
+}
+
+#[cfg(windows)]
+fn swallow(f: impl FnOnce()) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
 }
 
 #[cfg(not(windows))]

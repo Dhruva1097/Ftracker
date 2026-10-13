@@ -3,6 +3,7 @@ pub mod crypto;
 pub mod db;
 pub mod db_lock;
 pub mod domain;
+pub mod fs_admin;
 pub mod integrity;
 pub mod paths;
 pub mod redact;
