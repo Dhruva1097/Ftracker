@@ -12,6 +12,7 @@ pub struct TgUpdate {
     pub date: i64,
     pub callback_query_id: Option<String>,
     pub callback_data: Option<String>,
+    pub message_id: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -99,13 +100,43 @@ impl TelegramClient {
     }
 
     pub fn answer_callback(&self, callback_query_id: &str, text: &str) -> Result<()> {
+        let mut form: Vec<(&str, &str)> = vec![("callback_query_id", callback_query_id)];
+        if !text.is_empty() {
+            form.push(("text", text));
+        }
         let resp = self
             .http()
             .post(self.url("answerCallbackQuery"))
-            .form(&[("callback_query_id", callback_query_id), ("text", text)])
+            .form(&form)
             .send()?;
         let v: Value = resp.json().unwrap_or(Value::Null);
         Self::ensure_ok(&v, "answerCallbackQuery")
+    }
+
+    pub fn edit_message_text(
+        &self,
+        chat_id: &str,
+        message_id: i64,
+        text: &str,
+        markup: Option<&str>,
+    ) -> Result<()> {
+        let mid = message_id.to_string();
+        let mut form: Vec<(&str, &str)> = vec![
+            ("chat_id", chat_id),
+            ("message_id", mid.as_str()),
+            ("text", text),
+            ("disable_web_page_preview", "true"),
+        ];
+        if let Some(m) = markup {
+            form.push(("reply_markup", m));
+        }
+        let resp = self
+            .http()
+            .post(self.url("editMessageText"))
+            .form(&form)
+            .send()?;
+        let v: Value = resp.json().unwrap_or(Value::Null);
+        Self::ensure_ok(&v, "editMessageText")
     }
 
     pub fn send_location(&self, chat_id: &str, fix: &GeoFix) -> Result<()> {
@@ -309,6 +340,10 @@ pub fn parse_get_updates_result(v: &Value) -> Vec<TgUpdate> {
             let Some(chat_id) = chat_id else {
                 continue;
             };
+            let message_id = msg
+                .and_then(|m| m.get("message_id"))
+                .and_then(|x| x.as_i64())
+                .unwrap_or(0);
             out.push(TgUpdate {
                 update_id,
                 chat_id,
@@ -316,6 +351,7 @@ pub fn parse_get_updates_result(v: &Value) -> Vec<TgUpdate> {
                 date: chrono::Utc::now().timestamp(),
                 callback_query_id: Some(callback_query_id),
                 callback_data: Some(callback_data),
+                message_id,
             });
             continue;
         }
@@ -334,6 +370,10 @@ pub fn parse_get_updates_result(v: &Value) -> Vec<TgUpdate> {
             .unwrap_or("")
             .to_string();
         let date = msg.get("date").and_then(|x| x.as_i64()).unwrap_or(0);
+        let message_id = msg
+            .get("message_id")
+            .and_then(|x| x.as_i64())
+            .unwrap_or(0);
         out.push(TgUpdate {
             update_id,
             chat_id,
@@ -341,6 +381,7 @@ pub fn parse_get_updates_result(v: &Value) -> Vec<TgUpdate> {
             date,
             callback_query_id: None,
             callback_data: None,
+            message_id,
         });
     }
     out
@@ -398,7 +439,7 @@ mod tests {
                     "callback_query": {
                         "id": "cb1",
                         "data": "o:ab",
-                        "message": { "chat": { "id": 12345 }, "date": 1 }
+                        "message": { "message_id": 77, "chat": { "id": 12345 }, "date": 1 }
                     }
                 }
             ]
@@ -408,5 +449,6 @@ mod tests {
         assert_eq!(u[0].callback_query_id.as_deref(), Some("cb1"));
         assert_eq!(u[0].callback_data.as_deref(), Some("o:ab"));
         assert_eq!(u[0].chat_id, "12345");
+        assert_eq!(u[0].message_id, 77);
     }
 }
