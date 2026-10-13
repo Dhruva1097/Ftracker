@@ -1,17 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <?ifndef Platform ?>
-    <?define Platform = "x64" ?>
-  <?endif ?>
-  <?if $(var.Platform) = x64 ?>
-    <?define ProductCode = "{8F3A0B21-6C74-4E91-9A55-1D2C3B4A5E6F}" ?>
-    <?define Win64 = "yes" ?>
-    <?define ProgramFilesFolder = "ProgramFiles64Folder" ?>
-  <?else ?>
-    <?define ProductCode = "{8F3A0B21-6C74-4E91-9A55-1D2C3B4A5E70}" ?>
-    <?define Win64 = "no" ?>
-    <?define ProgramFilesFolder = "ProgramFilesFolder" ?>
-  <?endif ?>
+  <?include $(sys.SOURCEFILEDIR)Config.wxi ?>
   <Product Id="$(var.ProductCode)" Name="Ftracker" Language="1033" Version="1.0.0"
            Manufacturer="Ftracker" UpgradeCode="{A91C2D3E-4F56-4789-ABCD-0123456789AB}">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="$(var.Platform)" />
@@ -31,6 +20,7 @@
       <ComponentGroupRef Id="ServiceComponents" />
       <ComponentGroupRef Id="TaskComponents" />
       <ComponentGroupRef Id="ExtensionComponents" />
+      <ComponentGroupRef Id="NativeHostComponents" />
       <?ifdef Preassigned ?>
       <ComponentGroupRef Id="PreassignComponents" />
       <?endif ?>

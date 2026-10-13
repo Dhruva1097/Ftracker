@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Include>
+  <?ifndef Platform ?>
+    <?define Platform = "x64" ?>
+  <?endif ?>
+  <?if $(var.Platform) = x64 ?>
+    <?define ProductCode = "{8F3A0B21-6C74-4E91-9A55-1D2C3B4A5E6F}" ?>
+    <?define Win64 = "yes" ?>
+    <?define ProgramFilesFolder = "ProgramFiles64Folder" ?>
+  <?else ?>
+    <?define ProductCode = "{8F3A0B21-6C74-4E91-9A55-1D2C3B4A5E70}" ?>
+    <?define Win64 = "no" ?>
+    <?define ProgramFilesFolder = "ProgramFilesFolder" ?>
+  <?endif ?>
+</Include>

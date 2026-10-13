@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?include $(sys.SOURCEFILEDIR)Config.wxi ?>
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLDIR">
       <Component Id="FtrackerExeComp" Guid="{C1D2E3F4-A5B6-4789-9C0D-1E2F3A4B5C6D}" Win64="$(var.Win64)">

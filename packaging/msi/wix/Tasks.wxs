@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?include $(sys.SOURCEFILEDIR)Config.wxi ?>
   <Fragment>
     <ComponentGroup Id="TaskComponents" Directory="INSTALLDIR">
       <Component Id="LogonTaskXml" Guid="{A5B6C7D8-E9F0-4123-B041-5C6D7E8F9012}" Win64="$(var.Win64)">

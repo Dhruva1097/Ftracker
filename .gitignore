@@ -1,4 +1,6 @@
 /target/
+/tools/wix311/
+/tools/wix311-binaries.zip
 **/*.pdb
 **/*.pfx
 .env

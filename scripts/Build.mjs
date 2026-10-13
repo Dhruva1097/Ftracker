@@ -114,7 +114,9 @@ export class Build {
 
   async findWixBin() {
     const fromEnv = process.env.WIX ? path.join(process.env.WIX, "bin") : "";
+    const local = path.join(this.root, "tools", "wix311");
     const candidates = [
+      local,
       fromEnv,
       "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
       "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin",
@@ -129,22 +131,43 @@ export class Build {
     return "";
   }
 
+  async ensureWix() {
+    const existing = await this.findWixBin();
+    if (existing) {
+      return existing;
+    }
+    const dest = path.join(this.root, "tools", "wix311");
+    const zip = path.join(this.root, "tools", "wix311-binaries.zip");
+    const url =
+      "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip";
+    await fs.mkdir(path.join(this.root, "tools"), { recursive: true });
+    console.log("Downloading WiX Toolset 3.11.2 (one-time, not packed into the MSI)...");
+    await this.runCommand("curl", ["-L", "--fail", "-o", zip, url]);
+    await fs.mkdir(dest, { recursive: true });
+    await this.runCommand("powershell", [
+      "-NoProfile",
+      "-Command",
+      `Expand-Archive -LiteralPath '${zip.replace(/'/g, "''")}' -DestinationPath '${dest.replace(/'/g, "''")}' -Force`,
+    ]);
+    const candle = path.join(dest, "candle.exe");
+    if (!(await this.fileExists(candle))) {
+      throw new Error(`WiX download finished but ${candle} is missing`);
+    }
+    return dest;
+  }
+
   async tryWix(preassigned) {
     const wxsDir = path.join(this.root, "packaging", "msi", "wix");
     if (!(await this.fileExists(path.join(wxsDir, "Product.wxs")))) {
       return;
     }
-    const wixBin = await this.findWixBin();
-    if (!wixBin) {
-      console.warn(
-        "WiX Toolset 3.11 (candle.exe) not found. x64 exe is in target/x86_64-pc-windows-msvc/release/. Install WiX 3.11 and run pnpm build again for the MSI."
-      );
-      return;
-    }
+    const wixBin = await this.ensureWix();
     const candle = path.join(wixBin, "candle.exe");
     const light = path.join(wixBin, "light.exe");
     const outDir = path.join(this.root, "target", "wix");
+    const distDir = path.join(this.root, "dist");
     await fs.mkdir(outDir, { recursive: true });
+    await fs.mkdir(distDir, { recursive: true });
     const wxs = [
       "Product.wxs",
       "Files.wxs",
@@ -170,12 +193,13 @@ export class Build {
       candleArgs.push(path.join(wxsDir, f));
     }
     await this.runCommand(`"${candle}"`, candleArgs);
-    const msi = path.join(outDir, "Ftracker-1.0.0-x64.msi");
+    const msi = path.join(distDir, "Ftracker-1.0.0-x64.msi");
     const lightArgs = [
       "-nologo",
       "-ext",
       "WixUtilExtension",
       "-spdb",
+      "-sice:ICE20",
       "-out",
       msi,
       `-b`,
@@ -229,6 +253,7 @@ export class Build {
         console.warn("x86 release build failed:", err.message);
       }
       await this.tryWix(preassigned);
+      await this.collectDist();
       await this.trySign();
       await this.printOutputs();
     } finally {
@@ -236,13 +261,52 @@ export class Build {
     }
   }
 
+  async copyIntoDist(src, destRel) {
+    if (!(await this.fileExists(src))) {
+      return null;
+    }
+    const dest = path.join(this.root, "dist", destRel);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.copyFile(src, dest);
+    return dest;
+  }
+
+  async collectDist() {
+    await fs.mkdir(path.join(this.root, "dist"), { recursive: true });
+    const copies = [
+      [
+        path.join(this.root, "target", "wix", "Ftracker-1.0.0-x64.msi"),
+        "Ftracker-1.0.0-x64.msi",
+      ],
+      [
+        path.join(this.root, "target", "x86_64-pc-windows-msvc", "release", "ftracker.exe"),
+        path.join("x64", "ftracker.exe"),
+      ],
+      [
+        path.join(this.root, "target", "x86_64-pc-windows-msvc", "release", "ftracker-svc.exe"),
+        path.join("x64", "ftracker-svc.exe"),
+      ],
+      [
+        path.join(this.root, "target", "i686-pc-windows-msvc", "release", "ftracker.exe"),
+        path.join("x86", "ftracker.exe"),
+      ],
+      [
+        path.join(this.root, "target", "i686-pc-windows-msvc", "release", "ftracker-svc.exe"),
+        path.join("x86", "ftracker-svc.exe"),
+      ],
+    ];
+    for (const [src, rel] of copies) {
+      await this.copyIntoDist(src, rel);
+    }
+  }
+
   async printOutputs() {
     const artifacts = [
-      path.join(this.root, "target", "wix", "Ftracker-1.0.0-x64.msi"),
-      path.join(this.root, "target", "x86_64-pc-windows-msvc", "release", "ftracker.exe"),
-      path.join(this.root, "target", "x86_64-pc-windows-msvc", "release", "ftracker-svc.exe"),
-      path.join(this.root, "target", "i686-pc-windows-msvc", "release", "ftracker.exe"),
-      path.join(this.root, "target", "i686-pc-windows-msvc", "release", "ftracker-svc.exe"),
+      path.join(this.root, "dist", "Ftracker-1.0.0-x64.msi"),
+      path.join(this.root, "dist", "x64", "ftracker.exe"),
+      path.join(this.root, "dist", "x64", "ftracker-svc.exe"),
+      path.join(this.root, "dist", "x86", "ftracker.exe"),
+      path.join(this.root, "dist", "x86", "ftracker-svc.exe"),
     ];
     const found = [];
     for (const p of artifacts) {
@@ -254,7 +318,7 @@ export class Build {
     if (found.length === 0) {
       return;
     }
-    console.log("Output:");
+    console.log("Output (dist/):");
     for (const p of found) {
       console.log(`  ${p}`);
     }
