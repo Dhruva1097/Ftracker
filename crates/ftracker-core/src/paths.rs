@@ -147,9 +147,7 @@ pub fn apply_admin_acl(path: &Path) -> Result<()> {
         } else {
             "Administrators:F"
         };
-        let _ = std::process::Command::new("icacls")
-            .args([&path_str, "/remove:d", "Users"])
-            .output();
+        let _ = run_hidden("icacls", &[path_str.clone(), "/remove:d".into(), "Users".into()]);
         let mut args = vec![
             path_str.clone(),
             "/inheritance:r".into(),
@@ -167,9 +165,19 @@ pub fn apply_admin_acl(path: &Path) -> Result<()> {
                 args.push(format!("{account}:M"));
             }
         }
-        let _ = std::process::Command::new("icacls").args(&args).output();
+        let _ = run_hidden("icacls", &args);
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn run_hidden(program: &str, args: &[String]) -> std::io::Result<std::process::Output> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new(program)
+        .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
 }
 
 pub fn is_access_denied(err: &impl std::fmt::Display) -> bool {

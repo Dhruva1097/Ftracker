@@ -117,9 +117,21 @@ fn stage_file(src: &Path, dest: &Path) -> Result<u64, String> {
 
 fn grant_users_read(path: &Path) {
     let s = path.to_string_lossy().to_string();
-    let _ = Command::new("icacls")
-        .args([&s, "/grant", "Users:R"])
-        .output();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let _ = Command::new("icacls")
+            .args([&s, "/grant", "Users:R"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = Command::new("icacls")
+            .args([&s, "/grant", "Users:R"])
+            .output();
+    }
 }
 
 fn fmt_size(n: u64) -> String {

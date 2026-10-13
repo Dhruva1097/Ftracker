@@ -23,6 +23,10 @@ fn purpose_copy(purpose: &str) -> (&'static str, &'static str) {
             "Change employee",
             "Enter the admin authenticator code to change the registered employee.",
         ),
+        "upgrade" => (
+            "Update Ftracker",
+            "Enter the 6-digit code from Google Authenticator to continue setup.",
+        ),
         _ => ("Ftracker", "Enter the admin authenticator code."),
     }
 }

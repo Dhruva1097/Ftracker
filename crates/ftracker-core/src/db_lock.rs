@@ -5,7 +5,10 @@ pub struct DbLock {
     handle: windows::Win32::Foundation::HANDLE,
 }
 
-const NAME: &str = "Global\\FtrackerDbMutex";
+// Local, not Global: creating Global\\* needs SeCreateGlobalPrivilege. The
+// session process runs as the logged-on user (medium IL after MSI launch) and
+// CreateMutexW then returns 0x80070005, which was mis-reported as DB_CORRUPT.
+const NAME: &str = "Local\\FtrackerDbMutex";
 
 impl DbLock {
     pub fn acquire(wait_ms: u32) -> Result<Self> {

@@ -3,6 +3,7 @@ pub enum Cmd {
     Run { restarted: bool },
     Enroll { preassigned: bool },
     Uninstall { otp: Option<String> },
+    UpgradeTotp,
     NativeHost,
     EnsureRunning,
     Service { console: bool },
@@ -12,6 +13,7 @@ pub fn parse(args: Vec<String>) -> Cmd {
     let mut enroll = false;
     let mut preassigned = false;
     let mut uninstall = false;
+    let mut upgrade_totp = false;
     let mut native = false;
     let mut ensure = false;
     let mut service = false;
@@ -23,6 +25,7 @@ pub fn parse(args: Vec<String>) -> Cmd {
             "--enroll" => enroll = true,
             "--preassigned" | "--pre-assigned" => preassigned = true,
             "--uninstall" => uninstall = true,
+            "--upgrade-totp" => upgrade_totp = true,
             "--native-host" => native = true,
             "--ensure-running" => ensure = true,
             "--service" => service = true,
@@ -48,6 +51,8 @@ pub fn parse(args: Vec<String>) -> Cmd {
         Cmd::EnsureRunning
     } else if uninstall {
         Cmd::Uninstall { otp }
+    } else if upgrade_totp {
+        Cmd::UpgradeTotp
     } else if enroll {
         Cmd::Enroll { preassigned }
     } else {
@@ -81,6 +86,7 @@ mod tests {
             Cmd::Uninstall { otp } => assert_eq!(otp.as_deref(), Some("123456")),
             _ => panic!("expected uninstall"),
         }
+        assert!(matches!(p(&["--upgrade-totp"]), Cmd::UpgradeTotp));
         assert!(matches!(p(&[]), Cmd::Run { restarted: false }));
     }
 }

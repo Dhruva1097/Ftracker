@@ -202,7 +202,6 @@ export class Build {
       "-ext",
       "WixUtilExtension",
       "-spdb",
-      "-sice:ICE20",
       "-out",
       msi,
       `-b`,

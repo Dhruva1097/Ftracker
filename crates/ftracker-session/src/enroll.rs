@@ -124,6 +124,26 @@ fn finish_enroll(mut cfg: AppConfig) -> Result<()> {
     Ok(())
 }
 
+/// MSI upgrade: prompt for the existing authenticator code. Ok = continue setup; Err = abort.
+pub fn upgrade_totp() -> Result<()> {
+    let cfg = match AppConfig::load() {
+        Ok(c) if c.is_registered() => c,
+        _ => return Ok(()),
+    };
+    let Some(code) = totp_dialog::prompt("upgrade") else {
+        return Err(anyhow!("cancelled"));
+    };
+    if !totp::verify(
+        &cfg.totp_secret_b32,
+        &code,
+        chrono::Local::now().timestamp(),
+    ) {
+        totp_dialog::error("TOTP did not match. Setup stopped.");
+        return Err(anyhow!("cancelled"));
+    }
+    Ok(())
+}
+
 fn reregister(mut cfg: AppConfig) -> Result<()> {
     let code = totp_dialog::prompt("reregister").ok_or_else(|| anyhow!("cancelled"))?;
     if !totp::verify(

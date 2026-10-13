@@ -101,6 +101,14 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
         Ok(s) => s,
         Err(e) => {
             ui::log(format!("store open failed: {e:#}"));
+            let msg = format!("{e:#}");
+            if ftracker_core::paths::is_access_denied(&e)
+                || msg.contains("0x80070005")
+                || msg.contains("db busy")
+                || msg.contains("db lock")
+            {
+                return Err(e);
+            }
             let client = TelegramClient::new(&cfg.telegram_bot_token);
             let loc = location::current();
             let _ = client.send_admin(

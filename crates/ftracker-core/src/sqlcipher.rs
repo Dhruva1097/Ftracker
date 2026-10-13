@@ -26,13 +26,35 @@ impl EncryptedDb {
             enc_path: enc_path.to_path_buf(),
         };
         if enc_path.exists() {
-            db.restore().context("DB_CORRUPT")?;
+            if let Err(e) = db.restore() {
+                if crate::paths::is_access_denied(&e) {
+                    if let Some(parent) = enc_path.parent() {
+                        let _ = crate::paths::apply_admin_acl(parent);
+                    }
+                    let _ = crate::paths::apply_admin_acl(enc_path);
+                    db.restore().context("DB_CORRUPT")?;
+                } else {
+                    // Wrong key after re-enroll, truncated file, etc. Keep the
+                    // old blob aside and start empty instead of alerting forever.
+                    quarantine_enc(enc_path);
+                }
+            }
         }
         Ok(db)
     }
 
     fn restore(&mut self) -> Result<()> {
-        let blob = fs::read(&self.enc_path)?;
+        let blob = match fs::read(&self.enc_path) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                if let Some(parent) = self.enc_path.parent() {
+                    let _ = crate::paths::apply_admin_acl(parent);
+                }
+                let _ = crate::paths::apply_admin_acl(&self.enc_path);
+                fs::read(&self.enc_path)?
+            }
+            Err(e) => return Err(e.into()),
+        };
         if blob.len() < 12 + 16 {
             return Err(anyhow!("ciphertext too small"));
         }
@@ -85,6 +107,11 @@ impl EncryptedDb {
             .map(|m| m.len() as f64 / (1024.0 * 1024.0))
             .unwrap_or(0.0)
     }
+}
+
+fn quarantine_enc(path: &Path) {
+    let bad = path.with_extension("enc.bad");
+    let _ = fs::rename(path, bad);
 }
 
 pub fn table_exists(conn: &Connection, name: &str) -> Result<bool> {
@@ -164,5 +191,25 @@ mod tests {
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("x.enc");
         assert!(EncryptedDb::open(&[1u8; 16], &path).is_err());
+    }
+
+    #[test]
+    fn junk_enc_quarantined_starts_empty() {
+        let dir = std::env::temp_dir().join(format!(
+            "ftracker-enc-junk-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create test dir");
+        let path = dir.join("ftracker.enc");
+        fs::write(&path, b"not-ciphertext").unwrap();
+        let db = EncryptedDb::open(&[9u8; 32], &path).expect("open after junk");
+        assert!(!path.exists());
+        assert!(dir.join("ftracker.enc.bad").exists());
+        db.conn
+            .execute("CREATE TABLE t(x INTEGER)", [])
+            .unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -1,18 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <?include $(sys.SOURCEFILEDIR)Config.wxi ?>
-  <Product Id="*" Name="Ftracker" Language="1033" Version="1.0.0"
+  <Product Id="*" Name="Ftracker" Language="1033" Version="1.0.9"
            Manufacturer="Ftracker" UpgradeCode="{A91C2D3E-4F56-4789-ABCD-0123456789AB}">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"
              InstallPrivileges="elevated" Platform="$(var.Platform)" />
     <Condition Message="Windows 7 SP1 or later is required.">
       <![CDATA[Installed OR (VersionNT >= 601)]]>
     </Condition>
-    <Condition Message="Uninstall requires OTP= from ftracker.exe --uninstall (admin authenticator).">
-      <![CDATA[REMOVE <> "ALL" OR UPGRADINGPRODUCTCODE OR FTRACKER_OTP_DONE = "1" OR OTP]]>
-    </Condition>
+    <Property Id="OTP" Secure="yes" />
+    <Property Id="FTRACKER_OTP_DONE" Secure="yes" />
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+    <Property Id="MsiLogging" Value="voicewarmupx!" />
     <MajorUpgrade AllowSameVersionUpgrades="yes"
-                  Schedule="afterInstallInitialize"
+                  Schedule="afterInstallExecute"
                   IgnoreRemoveFailure="yes"
                   DowngradeErrorMessage="A newer version of Ftracker is already installed." />
     <MediaTemplate EmbedCab="yes" />
@@ -29,23 +30,13 @@
       <?endif ?>
     </Feature>
     <UIRef Id="FtrackerUI" />
-    <!-- Stop the running service before RemoveExistingProducts. CloseApplication cannot
-         kill a LocalSystem process and left the UI on "Preparing to install". -->
-    <CustomAction Id="KillFtracker"
-                  Directory="SystemFolder"
-                  ExeCommand="cmd.exe /c sc.exe failure FtrackerSvc reset= 0 actions= // &amp; taskkill.exe /F /IM ftracker.exe /T &amp; ping -n 2 127.0.0.1 &gt;nul &amp; taskkill.exe /F /IM ftracker.exe /T"
-                  Execute="deferred"
-                  Impersonate="no"
-                  Return="ignore" />
     <CustomAction Id="LaunchFtracker" FileKey="FtrackerExe" ExeCommand="" Execute="immediate" Impersonate="yes" Return="asyncNoWait" />
     <InstallExecuteSequence>
-      <Custom Action="KillFtracker" Before="RemoveExistingProducts" />
-      <Custom Action="LaunchFtracker" After="InstallFinalize">NOT Installed</Custom>
+      <Custom Action="LaunchFtracker" After="InstallFinalize">NOT REMOVE="ALL"</Custom>
     </InstallExecuteSequence>
   </Product>
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="SystemFolder" />
       <Directory Id="$(var.ProgramFilesFolder)">
         <Directory Id="INSTALLDIR" Name="Ftracker">
           <Directory Id="EXTDIR" Name="extension" />
