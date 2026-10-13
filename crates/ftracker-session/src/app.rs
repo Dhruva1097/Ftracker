@@ -142,6 +142,7 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
     }
     let (ipc_tx, ipc_from_thread) = mpsc::channel::<IpcMsg>();
     let (to_ipc, ipc_rx_thread) = mpsc::channel::<IpcMsg>();
+    let usb_to_ui = ipc_tx.clone();
     thread::spawn(move || ipc_loop(ipc_tx, ipc_rx_thread));
     let (admin_rx, admin_jobs) = crate::admin_cmd::start(cfg.clone(), client.clone());
 
@@ -174,6 +175,7 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
         admin_jobs,
     };
     state.on_start()?;
+    thread::spawn(move || crate::usb::run_watch(usb_to_ui));
     ui::log("entering tray message loop");
     ui::tray::run_message_loop(&mut state, user_launch)
 }
@@ -304,7 +306,7 @@ impl SessionState {
         let _ = self.store.persist();
     }
 
-    fn poll_ipc(&mut self) {
+    pub fn poll_ipc(&mut self) {
         while let Ok(msg) = self.ipc_rx.try_recv() {
             match msg {
                 IpcMsg::UsbBlocked {
@@ -326,6 +328,10 @@ impl SessionState {
     }
 
     fn handle_usb_totp(&mut self, letter: &str, name: &str, serial: &str, vidpid: &str) {
+        crate::usb::ensure_ejecting(letter, serial);
+        if !crate::usb::begin_dialog(serial) {
+            return;
+        }
         let user = windows_user();
         let loc = self.last_loc.clone();
         let blocked = messages::usb(
@@ -339,20 +345,34 @@ impl SessionState {
             "waiting_for_totp",
             loc.as_ref(),
         );
-        let _ = self
-            .client
-            .send_admin(&self.cfg.telegram_admin_chat_id, &blocked, loc.as_ref());
+        {
+            let client = self.client.clone();
+            let chat = self.cfg.telegram_admin_chat_id.clone();
+            let body = blocked;
+            let loc_tg = loc.clone();
+            thread::spawn(move || {
+                let _ = client.send_admin(&chat, &body, loc_tg.as_ref());
+            });
+        }
+        ui::log(format!("TOTP prompt for {letter} {name}"));
         if let Some(until) = self.totp_lock_until {
             if Instant::now() < until {
+                crate::usb::allow_retry(serial);
                 let _ = self.ipc_tx.send(IpcMsg::TotpCancel {
                     purpose: "usb".into(),
                 });
                 return;
             }
         }
-        match ui::totp_dialog::prompt("usb") {
+        let detail = if name.is_empty() {
+            letter.to_string()
+        } else {
+            format!("{letter}  {name}")
+        };
+        match ui::totp_dialog::prompt_with("usb", &detail) {
             Some(code) if totp::verify(&self.cfg.totp_secret_b32, &code, Local::now().timestamp()) => {
                 self.totp_fails = 0;
+                crate::usb::allow_serial(serial);
                 let _ = self.ipc_tx.send(IpcMsg::TotpResponse {
                     purpose: "usb".into(),
                     code,
@@ -381,6 +401,7 @@ impl SessionState {
                 } else {
                     "USB_DENIED"
                 };
+                crate::usb::allow_retry(serial);
                 let _ = self.ipc_tx.send(IpcMsg::TotpCancel {
                     purpose: "usb".into(),
                 });
@@ -400,6 +421,7 @@ impl SessionState {
                     .send_admin(&self.cfg.telegram_admin_chat_id, &t, loc.as_ref());
             }
             None => {
+                crate::usb::allow_retry(serial);
                 let _ = self.ipc_tx.send(IpcMsg::TotpCancel {
                     purpose: "usb".into(),
                 });

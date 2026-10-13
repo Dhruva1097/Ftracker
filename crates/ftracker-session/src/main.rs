@@ -15,6 +15,7 @@ mod screenshot;
 mod shutdown;
 mod ui;
 mod uninstall;
+mod usb;
 
 fn main() {
     std::panic::set_hook(Box::new(|info| {

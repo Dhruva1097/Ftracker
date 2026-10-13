@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::Mutex;
 
 use crate::app::SessionState;
@@ -7,8 +8,30 @@ use windows::Win32::Foundation::HWND;
 
 const TRAY_ID: u32 = 1;
 const WM_TRAY: u32 = 0x8001; // WM_APP + 1
+const WM_FT_DEVICE: u32 = 0x8002;
 const NIN_SELECT: u32 = 0x0400;
 const NOTIFYICON_VERSION_4: u32 = 4;
+
+static HOST: AtomicIsize = AtomicIsize::new(0);
+
+/// Wake the tray loop so a blocked device can show TOTP immediately.
+pub fn poke() {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+        let h = HOST.load(Ordering::SeqCst);
+        if h != 0 {
+            let _ = unsafe {
+                PostMessageW(
+                    HWND(h),
+                    WM_FT_DEVICE,
+                    windows::Win32::Foundation::WPARAM(0),
+                    windows::Win32::Foundation::LPARAM(0),
+                )
+            };
+        }
+    }
+}
 
 static LAST_TIP: Mutex<String> = Mutex::new(String::new());
 
@@ -61,6 +84,16 @@ fn fill_tip(buf: &mut [u16; 128], tip: &str) {
 }
 
 #[cfg(windows)]
+fn tray_icon() -> windows::Win32::UI::WindowsAndMessaging::HICON {
+    use windows::Win32::UI::WindowsAndMessaging::{LoadIconW, IDI_APPLICATION};
+    let sm = crate::ui::logo::small();
+    if sm.0 != 0 {
+        return sm;
+    }
+    unsafe { LoadIconW(None, IDI_APPLICATION).unwrap_or_default() }
+}
+
+#[cfg(windows)]
 fn nid_base(hwnd: HWND, tip: &str) -> windows::Win32::UI::Shell::NOTIFYICONDATAW {
     use windows::Win32::UI::Shell::{
         NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NOTIFYICONDATAW,
@@ -71,7 +104,7 @@ fn nid_base(hwnd: HWND, tip: &str) -> windows::Win32::UI::Shell::NOTIFYICONDATAW
         uID: TRAY_ID,
         uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP,
         uCallbackMessage: WM_TRAY,
-        hIcon: crate::ui::logo::small(),
+        hIcon: tray_icon(),
         ..Default::default()
     };
     fill_tip(&mut nid.szTip, tip);
@@ -166,7 +199,6 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
     let wc = WNDCLASSW {
         lpfnWndProc: Some(wndproc),
         hInstance: windows::Win32::Foundation::HINSTANCE(inst.0),
-        hIcon: crate::ui::logo::large(),
         lpszClassName: PCWSTR(class.as_ptr()),
         ..Default::default()
     };
@@ -192,6 +224,7 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
         anyhow::bail!("tray host window failed");
     }
     crate::ui::log(format!("tray: host hwnd={}", hwnd.0));
+    HOST.store(hwnd.0, Ordering::SeqCst);
     unsafe {
         set_user_data(hwnd, state as *mut SessionState as isize);
         let _ = SetTimer(hwnd, 1, 1000, None);
@@ -200,6 +233,7 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
     state.on_paint();
     tray_add(hwnd, &tip_text(Some(state)));
     crate::ui::log("tray: notify icon added — look next to the clock (or ^ overflow)");
+    state.poll_ipc();
     let _ = taskbar_created_msg();
 
     let mut msg = MSG::default();
@@ -241,6 +275,12 @@ unsafe extern "system" fn wndproc(
         }
         return LRESULT(0);
     }
+    if msg == WM_FT_DEVICE {
+        if let Some(s) = state {
+            s.poll_ipc();
+        }
+        return LRESULT(0);
+    }
     if msg == taskbar_created_msg() {
         tray_add(hwnd, &tip_text(state.as_deref()));
         return LRESULT(0);
@@ -270,6 +310,7 @@ unsafe extern "system" fn wndproc(
             LRESULT(0)
         }
         x if x == WM_DESTROY => {
+            HOST.store(0, Ordering::SeqCst);
             if let Some(s) = state {
                 s.flush_for_shutdown_reason("session_end");
             }
