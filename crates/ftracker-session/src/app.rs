@@ -50,7 +50,7 @@ pub struct SessionState {
 pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
     if crate::mutex::already_running() {
         if user_launch {
-            ui::widget::request_show();
+            ui::tray::request_show();
         }
         return Ok(());
     }
@@ -165,7 +165,7 @@ pub fn run(restarted: bool, user_launch: bool) -> Result<()> {
         admin_jobs,
     };
     state.on_start()?;
-    ui::widget::run_message_loop(&mut state, user_launch)
+    ui::tray::run_message_loop(&mut state, user_launch)
 }
 
 fn ipc_loop(tx: Sender<IpcMsg>, rx: Receiver<IpcMsg>) {
