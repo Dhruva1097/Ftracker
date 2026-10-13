@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::Mutex;
 
 use crate::app::SessionState;
@@ -11,7 +10,6 @@ const WM_TRAY: u32 = 0x8001; // WM_APP + 1
 const NIN_SELECT: u32 = 0x0400;
 const NOTIFYICON_VERSION_4: u32 = 4;
 
-static TRAY_ICON: AtomicIsize = AtomicIsize::new(0);
 static LAST_TIP: Mutex<String> = Mutex::new(String::new());
 
 /// Second launch while the session is already running: tray is already there.
@@ -54,158 +52,6 @@ fn taskbar_created_msg() -> u32 {
     *M.get_or_init(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) })
 }
 
-/// 16×16 PRIMARY rounded square with a white F (32-bit alpha, no .ico file).
-#[cfg(windows)]
-fn make_icon() -> windows::Win32::UI::WindowsAndMessaging::HICON {
-    use windows::Win32::Foundation::BOOL;
-    use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, BITMAPINFO, BITMAPINFOHEADER,
-        BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{CreateIconIndirect, ICONINFO, HICON};
-    const N: i32 = 16;
-    let (pr, pg, pb) = crate::ui::theme::split_rgb(crate::ui::theme::PRIMARY);
-    let (fr, fg, fb) = crate::ui::theme::split_rgb(crate::ui::theme::ON_PRIMARY);
-    let bmi = BITMAPINFO {
-        bmiHeader: BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: N,
-            biHeight: -N,
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    unsafe {
-        let hdc = CreateCompatibleDC(HDC(0));
-        if hdc.0 == 0 {
-            return HICON(0);
-        }
-        let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let hbmp = CreateDIBSection(
-            hdc,
-            &bmi,
-            DIB_RGB_COLORS,
-            &mut bits,
-            None,
-            0,
-        )
-        .unwrap_or(HBITMAP(0));
-        if hbmp.0 == 0 || bits.is_null() {
-            let _ = DeleteDC(hdc);
-            return HICON(0);
-        }
-        let px = std::slice::from_raw_parts_mut(bits as *mut u8, (N * N * 4) as usize);
-        for y in 0..N {
-            for x in 0..N {
-                let i = ((y * N + x) * 4) as usize;
-                if in_round_square(x, y, N, 3) {
-                    if is_f_glyph(x, y) {
-                        px[i] = fb;
-                        px[i + 1] = fg;
-                        px[i + 2] = fr;
-                    } else {
-                        px[i] = pb;
-                        px[i + 1] = pg;
-                        px[i + 2] = pr;
-                    }
-                    px[i + 3] = 255;
-                } else {
-                    px[i] = 0;
-                    px[i + 1] = 0;
-                    px[i + 2] = 0;
-                    px[i + 3] = 0;
-                }
-            }
-        }
-        let mut mask = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: N,
-                biHeight: -N,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let mut mask_bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let hmask = CreateDIBSection(
-            hdc,
-            &mut mask,
-            DIB_RGB_COLORS,
-            &mut mask_bits,
-            None,
-            0,
-        )
-        .unwrap_or(HBITMAP(0));
-        if hmask.0 != 0 && !mask_bits.is_null() {
-            let m = std::slice::from_raw_parts_mut(mask_bits as *mut u8, (N * N * 4) as usize);
-            m.fill(0);
-        }
-        let info = ICONINFO {
-            fIcon: BOOL(1),
-            xHotspot: 0,
-            yHotspot: 0,
-            hbmMask: hmask,
-            hbmColor: hbmp,
-        };
-        let icon = CreateIconIndirect(&info).unwrap_or(HICON(0));
-        if hmask.0 != 0 {
-            let _ = DeleteObject(hmask);
-        }
-        let _ = DeleteObject(hbmp);
-        let _ = DeleteDC(hdc);
-        icon
-    }
-}
-
-#[cfg(windows)]
-fn in_round_square(x: i32, y: i32, n: i32, r: i32) -> bool {
-    if x < 0 || y < 0 || x >= n || y >= n {
-        return false;
-    }
-    let cx0 = r;
-    let cy0 = r;
-    let cx1 = n - 1 - r;
-    let cy1 = n - 1 - r;
-    if x < cx0 && y < cy0 {
-        return (x - cx0) * (x - cx0) + (y - cy0) * (y - cy0) <= r * r;
-    }
-    if x > cx1 && y < cy0 {
-        return (x - cx1) * (x - cx1) + (y - cy0) * (y - cy0) <= r * r;
-    }
-    if x < cx0 && y > cy1 {
-        return (x - cx0) * (x - cx0) + (y - cy1) * (y - cy1) <= r * r;
-    }
-    if x > cx1 && y > cy1 {
-        return (x - cx1) * (x - cx1) + (y - cy1) * (y - cy1) <= r * r;
-    }
-    true
-}
-
-#[cfg(windows)]
-fn is_f_glyph(x: i32, y: i32) -> bool {
-    (x >= 4 && x <= 6 && y >= 4 && y <= 11)
-        || (x >= 4 && x <= 11 && y >= 4 && y <= 5)
-        || (x >= 4 && x <= 9 && y >= 7 && y <= 8)
-}
-
-#[cfg(windows)]
-fn icon_handle() -> windows::Win32::UI::WindowsAndMessaging::HICON {
-    use windows::Win32::UI::WindowsAndMessaging::HICON;
-    let raw = TRAY_ICON.load(Ordering::SeqCst);
-    if raw != 0 {
-        return HICON(raw);
-    }
-    let icon = make_icon();
-    TRAY_ICON.store(icon.0, Ordering::SeqCst);
-    icon
-}
-
 #[cfg(windows)]
 fn fill_tip(buf: &mut [u16; 128], tip: &str) {
     buf.fill(0);
@@ -225,7 +71,7 @@ fn nid_base(hwnd: HWND, tip: &str) -> windows::Win32::UI::Shell::NOTIFYICONDATAW
         uID: TRAY_ID,
         uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP,
         uCallbackMessage: WM_TRAY,
-        hIcon: icon_handle(),
+        hIcon: crate::ui::logo::small(),
         ..Default::default()
     };
     fill_tip(&mut nid.szTip, tip);
@@ -285,17 +131,6 @@ fn tray_delete(hwnd: HWND) {
 }
 
 #[cfg(windows)]
-fn destroy_icon() {
-    use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, HICON};
-    let raw = TRAY_ICON.swap(0, Ordering::SeqCst);
-    if raw != 0 {
-        unsafe {
-            let _ = DestroyIcon(HICON(raw));
-        }
-    }
-}
-
-#[cfg(windows)]
 fn tip_text(state: Option<&SessionState>) -> String {
     match state {
         Some(s) if !s.chip_label.is_empty() => s.chip_label.clone(),
@@ -330,6 +165,7 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
     let wc = WNDCLASSW {
         lpfnWndProc: Some(wndproc),
         hInstance: windows::Win32::Foundation::HINSTANCE(inst.0),
+        hIcon: crate::ui::logo::large(),
         lpszClassName: PCWSTR(class.as_ptr()),
         ..Default::default()
     };
@@ -358,7 +194,7 @@ pub fn run_message_loop(state: &mut SessionState, _user_launch: bool) -> anyhow:
         set_user_data(hwnd, state as *mut SessionState as isize);
         let _ = SetTimer(hwnd, 1, 1000, None);
     }
-    let _ = icon_handle();
+    crate::ui::logo::apply(hwnd);
     state.on_paint();
     tray_add(hwnd, &tip_text(Some(state)));
     let _ = taskbar_created_msg();
@@ -426,7 +262,6 @@ unsafe extern "system" fn wndproc(
                     s.flush_for_shutdown_reason("logoff_or_shutdown");
                 }
                 tray_delete(hwnd);
-                destroy_icon();
                 PostQuitMessage(0);
             }
             LRESULT(0)
@@ -436,7 +271,6 @@ unsafe extern "system" fn wndproc(
                 s.flush_for_shutdown_reason("session_end");
             }
             tray_delete(hwnd);
-            destroy_icon();
             PostQuitMessage(0);
             LRESULT(0)
         }

@@ -36,14 +36,7 @@ export class Dev {
 
   async run() {
     this.ensurePnpmStub();
-    await this.runCommand("cargo", [
-      "build",
-      "-p",
-      "ftracker-session",
-      "-p",
-      "ftracker-service",
-    ]);
-    // Old session holds the mutex, so a second pnpm dev would not load this build.
+    // Unlock ftracker.exe before cargo so this build actually replaces the binary.
     if (process.platform === "win32") {
       await new Promise((resolve) => {
         const child = spawn("taskkill", ["/IM", "ftracker.exe", "/F"], {
@@ -55,6 +48,13 @@ export class Dev {
         child.on("error", () => resolve());
       });
     }
+    await this.runCommand("cargo", [
+      "build",
+      "-p",
+      "ftracker-session",
+      "-p",
+      "ftracker-service",
+    ]);
     const exe = path.join(
       this.root,
       "target",

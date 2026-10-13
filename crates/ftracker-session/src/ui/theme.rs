@@ -5,6 +5,7 @@ pub const fn rgb(r: u8, g: u8, b: u8) -> u32 {
 }
 
 /// Split a COLORREF (`0x00BBGGRR`) into `(r, g, b)`.
+#[allow(dead_code)]
 pub const fn split_rgb(c: u32) -> (u8, u8, u8) {
     ((c & 0xff) as u8, ((c >> 8) & 0xff) as u8, ((c >> 16) & 0xff) as u8)
 }

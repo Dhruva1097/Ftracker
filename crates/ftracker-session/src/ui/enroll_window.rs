@@ -150,6 +150,7 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
         lpfnWndProc: Some(wndproc),
         hInstance: windows::Win32::Foundation::HINSTANCE(inst.0),
         hCursor: unsafe { LoadCursorW(None, IDC_ARROW).ok()? },
+        hIcon: crate::ui::logo::large(),
         hbrBackground: bg,
         lpszClassName: PCWSTR(class.as_ptr()),
         ..Default::default()
@@ -209,6 +210,7 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
     if hwnd.0 == 0 {
         return None;
     }
+    crate::ui::logo::apply(hwnd);
 
     let font = unsafe { CreateFontW(-dpi::px(16), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
     let font_title = unsafe { CreateFontW(-dpi::px(24), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, w!("Segoe UI")) };
