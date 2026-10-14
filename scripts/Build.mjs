@@ -70,31 +70,38 @@ export class Build {
     return "-C target-feature=+crt-static";
   }
 
-  async cargoRelease(target) {
+  async requireTelegramEnv() {
+    const env = await this.readDotenv();
+    if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_ADMIN_CHAT_ID) {
+      throw new Error(
+        "TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID must both be set in .env. They are baked into the MSI and never asked on the PC."
+      );
+    }
+    console.log("Telegram bot token: from .env");
+    console.log("Admin Telegram chat id: from .env");
+    return env;
+  }
+
+  async cargoRelease(target, telegram) {
     await this.runCommand(
       "cargo",
       ["build", "--release", "--target", target, "-p", "ftracker-session", "-p", "ftracker-service"],
-      { RUSTFLAGS: this.rustflags() }
+      {
+        RUSTFLAGS: this.rustflags(),
+        FTRACKER_TELEGRAM_BOT_TOKEN: telegram.TELEGRAM_BOT_TOKEN,
+        FTRACKER_TELEGRAM_ADMIN_CHAT_ID: telegram.TELEGRAM_ADMIN_CHAT_ID,
+      }
     );
   }
 
-  async collectPreassign() {
-    const env = await this.readDotenv();
-    const botToken = env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
-      throw new Error("TELEGRAM_BOT_TOKEN missing in .env");
-    }
-    console.log("Telegram bot token: from .env");
+  async collectPreassign(telegram) {
     const employeeName = await this.prompt("Employee name: ");
     const dailyHours = await this.prompt("Daily hours required (e.g. 8): ");
-    const adminChatId =
-      env.TELEGRAM_ADMIN_CHAT_ID || (await this.prompt("Admin Telegram chat id: "));
-    if (env.TELEGRAM_ADMIN_CHAT_ID) {
-      console.log("Admin Telegram chat id: from .env");
-    }
-    if (!employeeName || !dailyHours || !botToken || !adminChatId) {
+    if (!employeeName || !dailyHours) {
       throw new Error("Employee name and daily hours are required.");
     }
+    const botToken = telegram.TELEGRAM_BOT_TOKEN;
+    const adminChatId = telegram.TELEGRAM_ADMIN_CHAT_ID;
     const payload = {
       employee_name: employeeName,
       daily_hours_required: Number(dailyHours),
@@ -242,16 +249,17 @@ export class Build {
       console.log("Type 1 or 2, then press Enter. Waiting...");
       const mode = (await this.prompt("Choice [1]: ")).trim().toLowerCase();
       const preassigned = mode === "2" || mode === "preassigned" || mode === "pre-assigned" || mode === "p";
+      const telegram = await this.requireTelegramEnv();
       if (preassigned) {
-        await this.collectPreassign();
+        await this.collectPreassign(telegram);
       } else {
-        console.log("Interactive MSI: employee name, hours, token, chat id, and TOTP are collected at install time.");
+        console.log("Interactive MSI: employee name, hours, and TOTP on the PC. Telegram token and chat id come from .env only.");
         const payload = path.join(this.root, "packaging", "msi", "preassign.json");
         await fs.rm(payload, { force: true });
       }
-      await this.cargoRelease("x86_64-pc-windows-msvc");
+      await this.cargoRelease("x86_64-pc-windows-msvc", telegram);
       try {
-        await this.cargoRelease("i686-pc-windows-msvc");
+        await this.cargoRelease("i686-pc-windows-msvc", telegram);
       } catch (err) {
         console.warn("x86 release build failed:", err.message);
       }

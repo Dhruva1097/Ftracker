@@ -3,8 +3,6 @@ use ftracker_core::totp;
 use super::dpi;
 use super::theme;
 
-const IDC_TOKEN: i32 = 1001;
-const IDC_CHAT: i32 = 1002;
 const IDC_NAME: i32 = 1003;
 const IDC_HOURS: i32 = 1004;
 const IDC_CODE: i32 = 1005;
@@ -39,8 +37,6 @@ pub struct EnrollResult {
 struct EnrollState {
     token_val: String,
     chat_val: String,
-    token: windows::Win32::Foundation::HWND,
-    chat: windows::Win32::Foundation::HWND,
     name: windows::Win32::Foundation::HWND,
     hours: windows::Win32::Foundation::HWND,
     code: windows::Win32::Foundation::HWND,
@@ -308,8 +304,6 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
     let mut state = EnrollState {
         token_val: defaults.token.clone(),
         chat_val: defaults.chat_id.clone(),
-        token: HWND(0),
-        chat: HWND(0),
         name: HWND(0),
         hours: HWND(0),
         code: HWND(0),
@@ -367,41 +361,7 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
             IDC_SUB,
             inst_h,
         );
-        let show_token = defaults.token.is_empty();
-        let show_chat = defaults.chat_id.is_empty();
         let mut y = p(108);
-        if show_token {
-            label("Telegram bot token", p(28), y, hwnd, inst_h);
-            state.token = field(
-                "",
-                p(28),
-                y + p(20),
-                p(430),
-                p(40),
-                hwnd,
-                IDC_TOKEN,
-                inst_h,
-                false,
-                false,
-            );
-            y += p(80);
-        }
-        if show_chat {
-            label("Admin Telegram chat id", p(28), y, hwnd, inst_h);
-            state.chat = field(
-                "",
-                p(28),
-                y + p(20),
-                p(430),
-                p(40),
-                hwnd,
-                IDC_CHAT,
-                inst_h,
-                false,
-                false,
-            );
-            y += p(80);
-        }
         label("Employee name", p(28), y, hwnd, inst_h);
         state.name = field(
             &defaults.employee_name,
@@ -553,12 +513,6 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
         };
         setf(title, font_title);
         setf(sub, font_small);
-        if state.token.0 != 0 {
-            setf(state.token, font);
-        }
-        if state.chat.0 != 0 {
-            setf(state.chat, font);
-        }
         setf(state.name, font);
         setf(state.hours, font);
         setf(state.secret_box, font_small);
@@ -576,13 +530,7 @@ pub fn run(defaults: &Defaults) -> Option<EnrollResult> {
     unsafe {
         set_text(state.secret_box, &state.secret);
         let _ = ShowWindow(hwnd, SW_SHOW);
-        let focus = if state.token.0 != 0 {
-            state.token
-        } else if state.chat.0 != 0 {
-            state.chat
-        } else {
-            state.name
-        };
+        let focus = state.name;
         let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(focus);
         let _ = windows::Win32::UI::WindowsAndMessaging::SetTimer(hwnd, 1, 40, None);
     }
@@ -883,23 +831,15 @@ fn dib(bgra: &[u8], dim: i32) -> Option<windows::Win32::Graphics::Gdi::HBITMAP> 
 
 #[cfg(windows)]
 fn try_register(state: &mut EnrollState) -> bool {
-    let token = if state.token.0 != 0 {
-        get_text(state.token)
-    } else {
-        state.token_val.clone()
-    };
-    let chat = if state.chat.0 != 0 {
-        get_text(state.chat)
-    } else {
-        state.chat_val.clone()
-    };
+    let token = state.token_val.clone();
+    let chat = state.chat_val.clone();
     let name = get_text(state.name);
     let hours = get_text(state.hours);
     let code = get_text(state.code);
     if token.is_empty() || chat.is_empty() {
         set_text(
             state.status,
-            "Fill the bot token and admin chat id (from @userinfobot, or your .env file).",
+            "This build has no Telegram credentials. Put TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID in .env and rebuild.",
         );
         return false;
     }

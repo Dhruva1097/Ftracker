@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use crate::crypto;
 use crate::paths;
 
+include!(concat!(env!("OUT_DIR"), "/baked_telegram.rs"));
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub telegram_bot_token: String,
@@ -197,16 +199,31 @@ fn apply_dotenv_file(path: &std::path::Path) {
     }
 }
 
+fn nonempty(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
+}
+
+/// Token from `.env` (via `load_dotenv`) or baked from `.env` at compile time.
+/// Never prompted on the PC.
 pub fn env_telegram_token() -> Option<String> {
     std::env::var("TELEGRAM_BOT_TOKEN")
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+        .or_else(|| nonempty(BAKED_TELEGRAM_BOT_TOKEN))
 }
 
+/// Admin chat id from `.env` (via `load_dotenv`) or baked from `.env` at compile time.
+/// Never prompted on the PC.
 pub fn env_telegram_chat_id() -> Option<String> {
     std::env::var("TELEGRAM_ADMIN_CHAT_ID")
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+        .or_else(|| nonempty(BAKED_TELEGRAM_ADMIN_CHAT_ID))
 }

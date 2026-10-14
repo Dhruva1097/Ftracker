@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <?include $(sys.SOURCEFILEDIR)Config.wxi ?>
-  <Product Id="*" Name="Ftracker" Language="1033" Version="1.0.11"
+  <Product Id="*" Name="Ftracker" Language="1033" Version="1.0.12"
            Manufacturer="Ftracker" UpgradeCode="{A91C2D3E-4F56-4789-ABCD-0123456789AB}">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"
              InstallPrivileges="elevated" Platform="$(var.Platform)" />
